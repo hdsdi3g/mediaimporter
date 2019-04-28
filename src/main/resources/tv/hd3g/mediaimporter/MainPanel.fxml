@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.ToolBar?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+
+
+<BorderPane maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="449.0" prefWidth="806.0" xmlns="http://javafx.com/javafx/10.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tv.hd3g.mediaimporter.MainPanel">
+   <center>
+      <SplitPane dividerPositions="0.35" orientation="VERTICAL" prefHeight="200.0" prefWidth="160.0" BorderPane.alignment="CENTER">
+         <items>
+            <SplitPane dividerPositions="0.5" prefHeight="200.0" prefWidth="200.0">
+               <items>
+                  <BorderPane prefHeight="200.0" prefWidth="200.0">
+                     <top>
+                        <ToolBar prefHeight="40.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+                          <items>
+                            <Button fx:id="btnAddSourceDir" mnemonicParsing="false" text="Load a source drive / directory" />
+                              <Button fx:id="btnRemoveSourceDir" disable="true" mnemonicParsing="false" text="Remove from list" />
+                          </items>
+                        </ToolBar>
+                     </top>
+                     <center>
+                        <TableView fx:id="tableSources" prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+                          <columns>
+                            <TableColumn fx:id="tableSourcesColPath" editable="false" maxWidth="1.7976931348623157E308" minWidth="-1.0" prefWidth="391.42854964733124" sortable="false" text="Source path" />
+                          </columns>
+                        </TableView>
+                     </center>
+                  </BorderPane>
+                  <BorderPane prefHeight="200.0" prefWidth="200.0">
+                     <top>
+                        <ToolBar prefHeight="40.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+                          <items>
+                            <Button fx:id="btnAddDestinationDir" mnemonicParsing="false" text="Load a destination drive / directory" />
+                              <Button fx:id="btnRemoveDestinationDir" disable="true" mnemonicParsing="false" text="Remove from list" />
+                          </items>
+                        </ToolBar>
+                     </top>
+                     <center>
+                        <TableView fx:id="tableDestinations" prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+                          <columns>
+                            <TableColumn fx:id="tableDestinationsColPath" editable="false" prefWidth="234.28570771217346" sortable="false" text="Destination path" />
+                            <TableColumn fx:id="tableDestinationsColAvailable" editable="false" prefWidth="68.57139587402344" sortable="false" text="Available" />
+                              <TableColumn fx:id="tableDestinationsColSpeed" editable="false" prefWidth="46.85722351074219" sortable="false" text="Speed" />
+                              <TableColumn fx:id="tableDestinationsColSlots" editable="false" prefWidth="45.7142333984375" sortable="false" text="Slots" />
+                          </columns>
+                        </TableView>
+                     </center>
+                  </BorderPane>
+               </items>
+            </SplitPane>
+            <BorderPane prefHeight="200.0" prefWidth="200.0">
+               <center>
+                  <TableView fx:id="tableFiles" prefHeight="270.0" prefWidth="805.0" BorderPane.alignment="CENTER">
+                    <columns>
+                      <TableColumn fx:id="tableFilesColSource" editable="false" prefWidth="157.7142943739891" sortable="false" text="Source path" />
+                      <TableColumn fx:id="tableFilesColPath" editable="false" minWidth="0.0" prefWidth="338.8571472167969" sortable="false" text="File path" />
+                        <TableColumn fx:id="tableFilesColSize" editable="false" minWidth="0.0" prefWidth="62.2857666015625" sortable="false" text="Size" />
+                        <TableColumn fx:id="tableFilesColStatus" editable="false" minWidth="0.0" prefWidth="242.85711669921875" sortable="false" text="Status" />
+                    </columns>
+                  </TableView>
+               </center>
+               <top>
+                  <ToolBar prefHeight="40.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+                    <items>
+                      <Button fx:id="btnAddSourceToScan" disable="true" mnemonicParsing="false" text="Add / Scan" />
+                        <Button fx:id="btnClearScanlist" disable="true" mnemonicParsing="false" text="Clear list" />
+                    </items>
+                  </ToolBar>
+               </top>
+            </BorderPane>
+         </items>
+      </SplitPane>
+   </center>
+   <bottom>
+      <BorderPane prefHeight="25.0" prefWidth="806.0" BorderPane.alignment="CENTER">
+         <right>
+            <ToolBar prefHeight="40.0" prefWidth="144.0" BorderPane.alignment="CENTER">
+               <items>
+                  <Button fx:id="btnStartCopy" disable="true" mnemonicParsing="false" text="Copy" />
+                  <Button fx:id="btnStopCopy" disable="true" mnemonicParsing="false" text="Stop" />
+                  <Button fx:id="btnQuit" mnemonicParsing="false" text="Quit" />
+               </items>
+            </ToolBar>
+         </right>
+         <center>
+            <HBox prefHeight="71.0" prefWidth="662.0" BorderPane.alignment="CENTER">
+               <children>
+                  <ProgressBar fx:id="progressBar" prefHeight="18.0" prefWidth="324.0" progress="0.0">
+                     <HBox.margin>
+                        <Insets right="10.0" />
+                     </HBox.margin>
+                  </ProgressBar>
+                  <Label fx:id="lblProgressionCounter">
+                     <HBox.margin>
+                        <Insets right="10.0" />
+                     </HBox.margin>
+                  </Label>
+                  <Label fx:id="lblEta">
+                     <HBox.margin>
+                        <Insets right="10.0" />
+                     </HBox.margin>
+                  </Label>
+                  <Label fx:id="lblSpeedCopy">
+                     <HBox.margin>
+                        <Insets right="10.0" />
+                     </HBox.margin>
+                  </Label>
+               </children>
+               <BorderPane.margin>
+                  <Insets />
+               </BorderPane.margin>
+               <padding>
+                  <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+               </padding>
+            </HBox>
+         </center>
+      </BorderPane>
+   </bottom>
+</BorderPane>
