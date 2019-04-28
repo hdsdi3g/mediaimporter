@@ -11,8 +11,7 @@
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 
-
-<BorderPane maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="449.0" prefWidth="806.0" xmlns="http://javafx.com/javafx/10.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tv.hd3g.mediaimporter.MainPanel">
+<BorderPane maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="449.0" prefWidth="806.0" xmlns="http://javafx.com/javafx/10.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tv.hd3g.mediaimporter.MainPanel">
    <center>
       <SplitPane dividerPositions="0.35" orientation="VERTICAL" prefHeight="200.0" prefWidth="160.0" BorderPane.alignment="CENTER">
          <items>
@@ -30,7 +29,7 @@
                      <center>
                         <TableView fx:id="tableSources" prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
                           <columns>
-                            <TableColumn fx:id="tableSourcesColPath" editable="false" maxWidth="1.7976931348623157E308" minWidth="-1.0" prefWidth="391.42854964733124" sortable="false" text="Source path" />
+                            <TableColumn fx:id="tableSourcesColPath" editable="false" maxWidth="1.7976931348623157E308" minWidth="-1.0" prefWidth="391.42854964733124" text="Source path" />
                           </columns>
                         </TableView>
                      </center>
@@ -47,7 +46,7 @@
                      <center>
                         <TableView fx:id="tableDestinations" prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
                           <columns>
-                            <TableColumn fx:id="tableDestinationsColPath" editable="false" prefWidth="234.28570771217346" sortable="false" text="Destination path" />
+                            <TableColumn fx:id="tableDestinationsColPath" editable="false" prefWidth="234.28570771217346" text="Destination path" />
                             <TableColumn fx:id="tableDestinationsColAvailable" editable="false" prefWidth="68.57139587402344" sortable="false" text="Available" />
                               <TableColumn fx:id="tableDestinationsColSpeed" editable="false" prefWidth="46.85722351074219" sortable="false" text="Speed" />
                               <TableColumn fx:id="tableDestinationsColSlots" editable="false" prefWidth="45.7142333984375" sortable="false" text="Slots" />
@@ -61,10 +60,10 @@
                <center>
                   <TableView fx:id="tableFiles" prefHeight="270.0" prefWidth="805.0" BorderPane.alignment="CENTER">
                     <columns>
-                      <TableColumn fx:id="tableFilesColSource" editable="false" prefWidth="157.7142943739891" sortable="false" text="Source path" />
-                      <TableColumn fx:id="tableFilesColPath" editable="false" minWidth="0.0" prefWidth="338.8571472167969" sortable="false" text="File path" />
+                      <TableColumn fx:id="tableFilesColSource" editable="false" prefWidth="157.7142943739891" text="Source path" />
+                      <TableColumn fx:id="tableFilesColPath" editable="false" minWidth="0.0" prefWidth="338.8571472167969" text="File path" />
                         <TableColumn fx:id="tableFilesColSize" editable="false" minWidth="0.0" prefWidth="62.2857666015625" sortable="false" text="Size" />
-                        <TableColumn fx:id="tableFilesColStatus" editable="false" minWidth="0.0" prefWidth="242.85711669921875" sortable="false" text="Status" />
+                        <TableColumn fx:id="tableFilesColStatus" editable="false" minWidth="0.0" prefWidth="242.85711669921875" text="Status" />
                     </columns>
                   </TableView>
                </center>

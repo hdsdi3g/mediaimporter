@@ -17,6 +17,7 @@
 package tv.hd3g.mediaimporter;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
@@ -84,6 +85,7 @@ public class MainApp extends Application {
 		primaryStage.setOnCloseRequest(event -> {
 			event.consume();
 			// TODO do "stop"
+			primaryStage.close();
 		});
 		mainPanel.getBtnQuit().setOnAction(event -> {
 			event.consume();
@@ -199,21 +201,71 @@ public class MainApp extends Application {
 	}
 
 	private void initFileZone() {
+		mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
+
+		sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
+			while (change.next()) {
+				if (change.wasRemoved() | change.wasAdded()) {
+					mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
+				}
+			}
+		});
+		destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
+			while (change.next()) {
+				if (change.wasRemoved() | change.wasAdded()) {
+					mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
+				}
+			}
+		});
+		fileList.addListener((ListChangeListener<FileEntry>) change -> {
+			while (change.next()) {
+				if (change.wasRemoved() | change.wasAdded()) {
+					mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
+				}
+			}
+		});
+
 		mainPanel.getTableFiles().setItems(fileList);
-		mainPanel.getTableFilesColSource();
-		mainPanel.getTableFilesColPath();
-		mainPanel.getTableFilesColSize();
-		mainPanel.getTableFilesColStatus();
+		mainPanel.getTableFilesColSource().setCellValueFactory(FileEntry.getColSourceFactory());
+		mainPanel.getTableFilesColPath().setCellValueFactory(FileEntry.getColPathFactory());
+		mainPanel.getTableFilesColSize().setCellValueFactory(FileEntry.getColSizeFactory());
+		mainPanel.getTableFilesColStatus().setCellValueFactory(FileEntry.getColStatusFactory());
+
+		mainPanel.getTableFilesColSource().setCellFactory(col -> new TableCell<>() {
+			public void updateItem(final SourceEntry value, final boolean empty) {
+				super.updateItem(value, empty);
+				if (empty) {
+					setText(null);
+				} else {
+					setText(value.rootPath.getPath());
+				}
+			}
+		});
+		mainPanel.getTableFilesColSize().setCellFactory(col -> new TableCell<>() {
+			public void updateItem(final Number value, final boolean empty) {
+				super.updateItem(value, empty);
+				roundSizeValues(value, empty, this);
+			}
+		});
+
 		// TODO
 		mainPanel.getBtnAddSourceToScan().setOnAction(event -> {
 			event.consume();
-			log.debug("");
-
+			log.info("Start scan source dirs");
+			// TODO async
+			sourcesList.forEach(entry -> {
+				try {
+					entry.scanSource(fileList);
+				} catch (final IOException e) {
+					log.error("Can't scan " + entry, e); // TODO in msgbox
+				}
+			});
+			// TODO start scan dest (update fileList status)
 		});
 		mainPanel.getBtnClearScanlist().setOnAction(event -> {
 			event.consume();
-			log.debug("");
-
+			log.info("Clear scan list");
+			fileList.clear();
 		});
 	}
 
@@ -231,6 +283,13 @@ public class MainApp extends Application {
 			event.consume();
 			log.debug("");
 
+			mainPanel.getBtnAddSourceDir().setDisable(true);
+			mainPanel.getBtnRemoveSourceDir().setDisable(true);
+			mainPanel.getBtnAddDestinationDir().setDisable(true);
+			mainPanel.getBtnRemoveDestinationDir().setDisable(true);
+			mainPanel.getBtnAddSourceToScan().setDisable(true);
+			mainPanel.getBtnStopCopy().setDisable(false);
+			mainPanel.getBtnQuit().setDisable(true);
 		});
 		mainPanel.getBtnStopCopy().setOnAction(event -> {
 			event.consume();

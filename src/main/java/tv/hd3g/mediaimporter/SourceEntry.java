@@ -17,12 +17,18 @@
 package tv.hd3g.mediaimporter;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.ObservableList;
 import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.util.Callback;
 
@@ -37,6 +43,34 @@ public class SourceEntry extends BaseSourceDestEntry {
 		return param -> {
 			return new ReadOnlyObjectWrapper<>(param.getValue().rootPath);
 		};
+	}
+
+	public void scanSource(final ObservableList<FileEntry> fileList) throws IOException {
+		final Set<FileEntry> actualFileEntrySet = fileList.stream().distinct().collect(Collectors.toSet());
+		if (fileList.size() != actualFileEntrySet.size()) {
+			/**
+			 * Remove duplicate entries.
+			 */
+			fileList.clear();
+			fileList.addAll(actualFileEntrySet);
+			fileList.sort((l, r) -> {
+				return l.getFile().compareTo(r.getFile());
+			});
+		}
+
+		final Set<File> actualFileSet = fileList.stream().map(FileEntry::getFile).distinct().collect(Collectors.toSet());
+
+		Files.walk(rootPath.toPath()).map(Path::toFile).filter(founded -> {
+			if (founded.isDirectory()) {
+				return false;
+			} else if (actualFileSet.contains(founded)) {
+				return false;
+			}
+			return true;
+		}).sorted().forEach(founded -> {
+			actualFileSet.add(founded);
+			fileList.add(new FileEntry(this, founded));
+		});
 	}
 
 }

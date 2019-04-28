@@ -17,6 +17,11 @@
 package tv.hd3g.mediaimporter;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,19 +38,51 @@ public class DestinationEntry extends BaseSourceDestEntry {
 
 	private final SimpleLongProperty availableSpace;
 	private final SimpleLongProperty writeSpeed;
-	private final SimpleIntegerProperty slots;
+	private final SimpleIntegerProperty slotsCount;
+	private final List<Slot> slots;
 
 	public DestinationEntry(final File rootPath) {
 		super(rootPath);
 		availableSpace = new SimpleLongProperty(rootPath.getFreeSpace());
 		writeSpeed = new SimpleLongProperty(0);
-		slots = new SimpleIntegerProperty(0);
+		slotsCount = new SimpleIntegerProperty(0);
+		slots = new ArrayList<>();
+
+		try {
+			update(); // TODO async
+		} catch (final Exception e) {
+			log.error("Can't update destination " + rootPath, e); // TODO to popup
+		}
 	}
 
-	// TODO regulary update
-	// public void update() {
-	// availableSpace.set(rootPath.getFreeSpace());
-	// }
+	public void update() throws IOException { // TODO regulary update, async
+		availableSpace.set(rootPath.getFreeSpace());
+
+		final List<File> actualDirSlots = Arrays.asList(rootPath.listFiles(file -> file.isDirectory() & file.isHidden() == false & file.getName().startsWith(".") == false));
+
+		slots.removeIf(slot -> {
+			return actualDirSlots.contains(slot.getDir()) == false;
+		});
+		actualDirSlots.forEach(dir -> {
+			if (slots.stream().map(Slot::getDir).noneMatch(slotDir -> slotDir.getAbsoluteFile().equals(dir.getAbsoluteFile()))) {
+				slots.add(new Slot(dir));
+			}
+		});
+		slotsCount.setValue(slots.size());
+	}
+
+	class Slot {
+		private final File dir;
+
+		private Slot(final File dir) {
+			this.dir = Objects.requireNonNull(dir, "\"dir\" can't to be null");
+		}
+
+		public File getDir() {
+			return dir;
+		}
+		// XXX
+	}
 
 	public static Callback<CellDataFeatures<DestinationEntry, File>, ObservableValue<File>> getColPathFactory() {
 		return param -> {
@@ -67,7 +104,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 
 	public static Callback<CellDataFeatures<DestinationEntry, Number>, ObservableValue<Number>> getColAvailableSlots() {
 		return param -> {
-			return param.getValue().slots;
+			return param.getValue().slotsCount;
 		};
 	}
 

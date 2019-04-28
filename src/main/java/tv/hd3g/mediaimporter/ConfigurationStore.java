@@ -106,11 +106,13 @@ public class ConfigurationStore {
 			while (change.next()) {
 				change.getAddedSubList().forEach(entry -> {
 					prepareStatement("INSERT INTO sources(path) VALUES(?)", pstmt -> {
+						log.debug("INSERT sources " + entry.rootPath.getPath());
 						pstmt.setString(1, entry.rootPath.getPath());
 					});
 				});
 				change.getRemoved().forEach(entry -> {
 					prepareStatement("DELETE FROM sources WHERE path = ?", pstmt -> {
+						log.debug("DELETE sources " + entry.rootPath.getPath());
 						pstmt.setString(1, entry.rootPath.getPath());
 					});
 				});
@@ -120,11 +122,13 @@ public class ConfigurationStore {
 			while (change.next()) {
 				change.getAddedSubList().forEach(entry -> {
 					prepareStatement("INSERT INTO destinations(path) VALUES(?)", pstmt -> {
+						log.debug("INSERT destinations " + entry.rootPath.getPath());
 						pstmt.setString(1, entry.rootPath.getPath());
 					});
 				});
 				change.getRemoved().forEach(entry -> {
 					prepareStatement("DELETE FROM destinations WHERE path = ?", pstmt -> {
+						log.debug("DELETE destinations " + entry.rootPath.getPath());
 						pstmt.setString(1, entry.rootPath.getPath());
 					});
 				});
@@ -138,7 +142,7 @@ public class ConfigurationStore {
 				withPstmt.accept(pstmt);
 				pstmt.executeUpdate();
 			} catch (final SQLException e) {
-				throw new RuntimeException("Can't connect to SQLite", e);
+				throw new RuntimeException("Can't execute query on SQLite", e);
 			}
 		});
 	}
