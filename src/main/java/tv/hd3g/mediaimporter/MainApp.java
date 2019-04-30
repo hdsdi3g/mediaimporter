@@ -19,9 +19,11 @@ package tv.hd3g.mediaimporter;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -38,13 +40,20 @@ import javafx.scene.control.TableCell;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
+import tv.hd3g.mediaimporter.driveprobe.DriveProbe;
+import tv.hd3g.processlauncher.cmdline.ExecutableFinder;
+import tv.hd3g.processlauncher.tool.ToolRunner;
 
 public class MainApp extends Application {
 	private static Logger log = LogManager.getLogger();
 
+	public static final Logger log4javaFx = LogManager.getLogger("javafx");
+
 	private final ObservableList<SourceEntry> sourcesList;
 	private final ObservableList<DestinationEntry> destsList;
 	private final ObservableList<FileEntry> fileList;
+	private final DriveProbe driveProbe;
+	private final ToolRunner toolRunner;
 	// private final ConfigurationStore configurationStore;
 
 	public MainApp() {
@@ -52,7 +61,8 @@ public class MainApp extends Application {
 		sourcesList = FXCollections.observableList(new ArrayList<SourceEntry>());
 		destsList = FXCollections.observableList(new ArrayList<DestinationEntry>());
 		fileList = FXCollections.observableList(new ArrayList<FileEntry>());
-
+		driveProbe = DriveProbe.get();
+		toolRunner = new ToolRunner(new ExecutableFinder(), 1);
 		/*configurationStore =*/ new ConfigurationStore("mediaimporter", sourcesList, destsList);
 	}
 
@@ -98,7 +108,6 @@ public class MainApp extends Application {
 		initSourceZone();
 		initDestZone();
 		initFileZone();
-		initStatusZone();
 		initActionZone();
 	}
 
@@ -130,8 +139,8 @@ public class MainApp extends Application {
 		sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
 			while (change.next()) {
 				change.getAddedSubList().stream().filter(BaseSourceDestEntry.isStoredOn(sourcesList, destsList)).forEach(entry -> {
-				    // TODO warn: http://blog.pikodat.com/2015/10/11/frontend-logging-with-javafx/
-				    sourcesList.remove(entry);
+					MainApp.log4javaFx.warn(messages.getString("dontAllowDirs") + ": " + entry);
+					sourcesList.remove(entry);
 				});
 			}
 		});
@@ -172,8 +181,8 @@ public class MainApp extends Application {
 		destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
 			while (change.next()) {
 				change.getAddedSubList().stream().filter(BaseSourceDestEntry.isStoredOn(sourcesList, destsList)).forEach(entry -> {
-				    // TODO warn !
-				    destsList.remove(entry);
+					MainApp.log4javaFx.warn(messages.getString("dontAllowDirs") + ": " + entry);
+					destsList.remove(entry);
 				});
 			}
 		});
@@ -217,13 +226,6 @@ public class MainApp extends Application {
 				}
 			}
 		});
-		fileList.addListener((ListChangeListener<FileEntry>) change -> {
-			while (change.next()) {
-				if (change.wasRemoved() | change.wasAdded()) {
-					mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
-				}
-			}
-		});
 
 		mainPanel.getTableFiles().setItems(fileList);
 		mainPanel.getTableFilesColSource().setCellValueFactory(FileEntry.getColSourceFactory());
@@ -231,16 +233,6 @@ public class MainApp extends Application {
 		mainPanel.getTableFilesColSize().setCellValueFactory(FileEntry.getColSizeFactory());
 		mainPanel.getTableFilesColStatus().setCellValueFactory(FileEntry.getColStatusFactory());
 
-		mainPanel.getTableFilesColSource().setCellFactory(col -> new TableCell<>() {
-			public void updateItem(final SourceEntry value, final boolean empty) {
-				super.updateItem(value, empty);
-				if (empty) {
-					setText(null);
-				} else {
-					setText(value.rootPath.getPath());
-				}
-			}
-		});
 		mainPanel.getTableFilesColSize().setCellFactory(col -> new TableCell<>() {
 			public void updateItem(final Number value, final boolean empty) {
 				super.updateItem(value, empty);
@@ -248,19 +240,24 @@ public class MainApp extends Application {
 			}
 		});
 
-		// TODO
 		mainPanel.getBtnAddSourceToScan().setOnAction(event -> {
 			event.consume();
 			log.info("Start scan source dirs");
 			// TODO async
-			sourcesList.forEach(entry -> {
-				try {
-					entry.scanSource(fileList);
-				} catch (final IOException e) {
-					log.error("Can't scan " + entry, e); // TODO in msgbox
-				}
-			});
-			// TODO start scan dest (update fileList status)
+			mainPanel.getBtnClearScanlist().setDisable(true);
+			try {
+				final Map<File, String> lastProbeResult = driveProbe.getSNByMountedDrive(toolRunner);
+				sourcesList.forEach(entry -> {
+					try {
+						entry.scanSource(fileList, lastProbeResult);
+					} catch (final IOException e) {
+						MainApp.log4javaFx.error("Can't scan " + entry, e);
+					}
+				});
+				mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
+			} catch (InterruptedException | ExecutionException e1) {
+				MainApp.log4javaFx.error("Can't get S/N connected drives ", e1);
+			}
 		});
 		mainPanel.getBtnClearScanlist().setOnAction(event -> {
 			event.consume();
@@ -269,18 +266,9 @@ public class MainApp extends Application {
 		});
 	}
 
-	private void initStatusZone() {
-		// TODO
-		mainPanel.getProgressBar();
-		mainPanel.getLblProgressionCounter();
-		mainPanel.getLblEta();
-		mainPanel.getLblSpeedCopy();
-	}
-
 	private void initActionZone() {
-		// TODO
 		mainPanel.getBtnStartCopy().setOnAction(event -> {
-			event.consume();
+			event.consume(); // TODO StartCopy
 			log.debug("");
 
 			mainPanel.getBtnAddSourceDir().setDisable(true);
@@ -292,7 +280,7 @@ public class MainApp extends Application {
 			mainPanel.getBtnQuit().setDisable(true);
 		});
 		mainPanel.getBtnStopCopy().setOnAction(event -> {
-			event.consume();
+			event.consume(); // TODO StopCopy
 			log.debug("");
 
 		});

@@ -55,12 +55,14 @@ public class ConfigurationStore {
 			throw new RuntimeException("Can't create dir " + sqliteFile.getParent(), e1);
 		}
 
+		// sqliteFile.delete();
+
 		url = "jdbc:sqlite:" + sqliteFile.getPath().replaceAll("\\\\", "/");
 		if (sqliteFile.exists() == false) {
 			try (Connection conn = DriverManager.getConnection(url)) {
 				if (conn != null) {
 					final DatabaseMetaData meta = conn.getMetaData();
-					log.info("Create new " + meta.getDriverName() + " DB on " + sqliteFile);
+					log.info("Create new " + meta.getDriverName() + " on " + sqliteFile);
 				}
 			} catch (final SQLException e) {
 				throw new RuntimeException("Can't init database", e);

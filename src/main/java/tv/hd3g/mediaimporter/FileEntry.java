@@ -35,17 +35,19 @@ public class FileEntry {
 	private final SourceEntry source;
 	private final File file;
 	private final SimpleStringProperty status;
+	private final String driveSN;
 
-	public FileEntry(final SourceEntry source, final File file) {
+	public FileEntry(final SourceEntry source, final File file, final String driveSN) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
 		this.file = Objects.requireNonNull(file, "\"file\" can't to be null");
+		this.driveSN = Objects.requireNonNull(driveSN, "\"driveSN\" can't to be null");
 		status = new SimpleStringProperty();
 		// TODO update status on create
 	}
 
-	public static Callback<CellDataFeatures<FileEntry, SourceEntry>, ObservableValue<SourceEntry>> getColSourceFactory() {
+	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColSourceFactory() {
 		return param -> {
-			return new ReadOnlyObjectWrapper<>(param.getValue().source);
+			return new ReadOnlyObjectWrapper<>(param.getValue().source.rootPath.getPath() + " (" + param.getValue().driveSN + ")");
 		};
 	}
 

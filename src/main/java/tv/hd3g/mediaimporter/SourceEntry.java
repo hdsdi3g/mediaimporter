@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -45,7 +46,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 		};
 	}
 
-	public void scanSource(final ObservableList<FileEntry> fileList) throws IOException {
+	public void scanSource(final ObservableList<FileEntry> fileList, final Map<File, String> lastProbeResult) throws IOException {
 		final Set<FileEntry> actualFileEntrySet = fileList.stream().distinct().collect(Collectors.toSet());
 		if (fileList.size() != actualFileEntrySet.size()) {
 			/**
@@ -69,8 +70,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 			return true;
 		}).sorted().forEach(founded -> {
 			actualFileSet.add(founded);
-			fileList.add(new FileEntry(this, founded));
+			fileList.add(new FileEntry(this, founded, lastProbeResult.getOrDefault(rootPath.toPath().getRoot().toFile(), "Unknow")));
 		});
 	}
-
 }

@@ -67,7 +67,7 @@ public class MainPanel {
 	@FXML
 	private TableView<FileEntry> tableFiles;
 	@FXML
-	private TableColumn<FileEntry, SourceEntry> tableFilesColSource;
+	private TableColumn<FileEntry, String> tableFilesColSource;
 	@FXML
 	private TableColumn<FileEntry, String> tableFilesColPath;
 	@FXML
@@ -153,7 +153,7 @@ public class MainPanel {
 		return tableFiles;
 	}
 
-	public TableColumn<FileEntry, SourceEntry> getTableFilesColSource() {
+	public TableColumn<FileEntry, String> getTableFilesColSource() {
 		return tableFilesColSource;
 	}
 

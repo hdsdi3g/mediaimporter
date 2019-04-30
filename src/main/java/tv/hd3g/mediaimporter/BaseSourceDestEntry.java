@@ -43,7 +43,7 @@ public class BaseSourceDestEntry {
 				try {
 					return FileUtils.directoryContains(file, entry.rootPath);
 				} catch (final IOException e) {
-					log.error("Can't scan directory", e); // TODO display popup: http://blog.pikodat.com/2015/10/11/frontend-logging-with-javafx/
+					MainApp.log4javaFx.error("Can't scan directory " + file, e);
 					return true;
 				}
 			});

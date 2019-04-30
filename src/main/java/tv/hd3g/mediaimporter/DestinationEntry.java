@@ -51,7 +51,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		try {
 			update(); // TODO async
 		} catch (final Exception e) {
-			log.error("Can't update destination " + rootPath, e); // TODO to popup
+			MainApp.log4javaFx.error("Can't update destination " + rootPath, e);
 		}
 	}
 
@@ -81,7 +81,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		public File getDir() {
 			return dir;
 		}
-		// XXX
+		// TODO continue impl Slot
 	}
 
 	public static Callback<CellDataFeatures<DestinationEntry, File>, ObservableValue<File>> getColPathFactory() {
