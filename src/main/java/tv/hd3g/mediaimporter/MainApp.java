@@ -19,6 +19,7 @@ package tv.hd3g.mediaimporter;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -49,11 +50,18 @@ public class MainApp extends Application {
 
 	public static final Logger log4javaFx = LogManager.getLogger("javafx");
 
+	final static ResourceBundle messages;
+
+	static {
+		messages = ResourceBundle.getBundle(MainApp.class.getPackage().getName() + ".messages");
+	}
+
 	private final ObservableList<SourceEntry> sourcesList;
 	private final ObservableList<DestinationEntry> destsList;
 	private final ObservableList<FileEntry> fileList;
 	private final DriveProbe driveProbe;
 	private final ToolRunner toolRunner;
+	// private final ThreadPoolExecutor fileActionExecutor;
 	// private final ConfigurationStore configurationStore;
 
 	public MainApp() {
@@ -64,13 +72,19 @@ public class MainApp extends Application {
 		driveProbe = DriveProbe.get();
 		toolRunner = new ToolRunner(new ExecutableFinder(), 1);
 		/*configurationStore =*/ new ConfigurationStore("mediaimporter", sourcesList, destsList);
+
+		/*final AtomicLong counter = new AtomicLong();
+		fileActionExecutor = new ThreadPoolExecutor(1, 1, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
+			final Thread t = new Thread(r);
+			t.setPriority(Thread.MIN_PRIORITY);
+			t.setDaemon(true);
+			t.setName("JavaFX File async worker #" + counter.getAndIncrement());
+			return t;
+		});*/
 	}
 
 	private MainPanel mainPanel;
 	private Stage stage;
-	private ResourceBundle messages;
-
-	// TODO java task example https://gist.github.com/jewelsea/2774481
 
 	@Override
 	public void start(final Stage primaryStage) throws Exception {
@@ -78,7 +92,6 @@ public class MainApp extends Application {
 
 		final FXMLLoader d = new FXMLLoader();
 
-		messages = ResourceBundle.getBundle(getClass().getPackage().getName() + ".messages");
 		d.setResources(Objects.requireNonNull(messages, "\"messages\" can't to be null"));
 		final BorderPane root = (BorderPane) d.load(getClass().getResource(MainPanel.class.getSimpleName() + ".fxml").openStream());
 
@@ -114,6 +127,7 @@ public class MainApp extends Application {
 	@Override
 	public void stop() {
 		log.info("JavaFX GUI Interface is stopped");
+		System.exit(0);
 	}
 
 	private Optional<File> selectDirectory(final String titleTextKey) {
@@ -192,7 +206,15 @@ public class MainApp extends Application {
 				final DestinationEntry toAdd = new DestinationEntry(file);
 				if (destsList.contains(toAdd) == false) {
 					log.info("Add new dest directory: " + file);
-					destsList.add(toAdd);
+					try {
+						toAdd.updateSlotsContent();
+						destsList.add(toAdd);
+						fileList.forEach(fileEntry -> {
+							fileEntry.addDestination(toAdd);
+						});
+					} catch (final IOException e) {
+						MainApp.log4javaFx.error("Can't update destination " + toAdd.rootPath, e);
+					}
 				}
 			});
 		});
@@ -202,12 +224,65 @@ public class MainApp extends Application {
 			if (selected != null) {
 				log.debug("Remove dest dir: " + selected);
 				destsList.remove(selected);
+
+				log.debug("Update all actual references: " + selected);
+				fileList.forEach(fileEntry -> {
+					fileEntry.removeDestination(selected);
+				});
 			}
 		});
 		mainPanel.getTableDestinations().getSelectionModel().selectedItemProperty().addListener((observable_value, old_value, new_value) -> {
 			mainPanel.getBtnRemoveDestinationDir().setDisable(new_value == null);
 		});
 	}
+
+	/*private class UpdateFileEntryStatusTask extends Task<Void> {
+		private final FileEntry fileEntry;
+		private final DestinationEntry destination;
+
+		UpdateFileEntryStatusTask(final FileEntry fileEntry, final DestinationEntry destination) {
+			super();
+			this.fileEntry = fileEntry;
+			this.destination = destination;
+		}
+
+		@Override
+		protected Void call() throws Exception {
+			// Auto-generated method stub
+			// destination.
+			return null;
+		}*/
+	/*final Task task = new Task<ObservableList<String>>() {
+	@Override
+	protected ObservableList<String> call() throws InterruptedException {
+		updateMessage("Finding friends . . .");
+		for (int i = 0; i < 10; i++) {
+			Thread.sleep(200);
+			updateProgress(i + 1, 10);
+		}
+		updateMessage("Finished.");
+		return FXCollections.observableArrayList("John", "Jim", "Geoff", "Jill", "Suki");
+	}
+	// @Override protected void done() {
+	// super.done();
+	// System.out.println("This is bad, do not do this, this thread " + Thread.currentThread() + " is not the FXApplication thread.");
+	// runButton.setText("Voila!");
+	// }
+	};
+	statusLabel.textProperty().bind(task.messageProperty());
+	runButton.disableProperty().bind(task.runningProperty());
+	peopleView.itemsProperty().bind(task.valueProperty());
+	progressBar.progressProperty().bind(task.progressProperty());
+	task.stateProperty().addListener(new ChangeListener<Worker.State>() {
+	  @Override public void changed(ObservableValue<? extends Worker.State> observableValue, Worker.State oldState, Worker.State newState) {
+	    if (newState == Worker.State.SUCCEEDED) {
+	      System.out.println("This is ok, this thread " + Thread.currentThread() + " is the JavaFX Application thread.");
+	      runButton.setText("Voila!");
+	    }
+	  }
+	});
+
+	new Thread(task).start();}	*/
 
 	private void initFileZone() {
 		mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
@@ -243,13 +318,21 @@ public class MainApp extends Application {
 		mainPanel.getBtnAddSourceToScan().setOnAction(event -> {
 			event.consume();
 			log.info("Start scan source dirs");
-			// TODO async
 			mainPanel.getBtnClearScanlist().setDisable(true);
 			try {
-				final Map<File, String> lastProbeResult = driveProbe.getSNByMountedDrive(toolRunner);
+				final Map<File, String> lastProbeResult = driveProbe.getSNByMountedDrive(toolRunner);// TODO this async (blocking, with cancel+retry, and lazy update)
 				sourcesList.forEach(entry -> {
 					try {
-						entry.scanSource(fileList, lastProbeResult);
+						final List<FileEntry> newFilesEntries = entry.scanSource(fileList, lastProbeResult, destsList); // TODO first a lazy set for lastProbeResult
+
+						if (newFilesEntries.isEmpty() == false) {
+							log.info("Found " + newFilesEntries.size() + " new file(s), start update copies references");
+							destsList.forEach(destination -> {
+								newFilesEntries.forEach(newFileEntry -> {
+									newFileEntry.addDestination(destination);
+								});
+							});
+						}
 					} catch (final IOException e) {
 						MainApp.log4javaFx.error("Can't scan " + entry, e);
 					}

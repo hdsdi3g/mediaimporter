@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -46,7 +47,10 @@ public class SourceEntry extends BaseSourceDestEntry {
 		};
 	}
 
-	public void scanSource(final ObservableList<FileEntry> fileList, final Map<File, String> lastProbeResult) throws IOException {
+	/**
+	 * @return new file entries.
+	 */
+	public List<FileEntry> scanSource(final ObservableList<FileEntry> fileList, final Map<File, String> lastProbeResult, final List<DestinationEntry> destsList) throws IOException {
 		final Set<FileEntry> actualFileEntrySet = fileList.stream().distinct().collect(Collectors.toSet());
 		if (fileList.size() != actualFileEntrySet.size()) {
 			/**
@@ -61,16 +65,17 @@ public class SourceEntry extends BaseSourceDestEntry {
 
 		final Set<File> actualFileSet = fileList.stream().map(FileEntry::getFile).distinct().collect(Collectors.toSet());
 
-		Files.walk(rootPath.toPath()).map(Path::toFile).filter(founded -> {
+		return Files.walk(rootPath.toPath()).map(Path::toFile).filter(founded -> {
 			if (founded.isDirectory()) {
 				return false;
 			} else if (actualFileSet.contains(founded)) {
 				return false;
 			}
 			return true;
-		}).sorted().forEach(founded -> {
-			actualFileSet.add(founded);
-			fileList.add(new FileEntry(this, founded, lastProbeResult.getOrDefault(rootPath.toPath().getRoot().toFile(), "Unknow")));
-		});
+		}).sorted().peek(founded -> actualFileSet.add(founded)).map(founded -> {
+			final FileEntry newFileEntry = new FileEntry(this, founded, lastProbeResult.getOrDefault(rootPath.toPath().getRoot().toFile(), "Unknow"), destsList);
+			fileList.add(newFileEntry);
+			return newFileEntry;
+		}).collect(Collectors.toUnmodifiableList());
 	}
 }

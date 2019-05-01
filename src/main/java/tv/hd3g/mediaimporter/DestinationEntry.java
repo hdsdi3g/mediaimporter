@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,15 +48,9 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		writeSpeed = new SimpleLongProperty(0);
 		slotsCount = new SimpleIntegerProperty(0);
 		slots = new ArrayList<>();
-
-		try {
-			update(); // TODO async
-		} catch (final Exception e) {
-			MainApp.log4javaFx.error("Can't update destination " + rootPath, e);
-		}
 	}
 
-	public void update() throws IOException { // TODO regulary update, async
+	public void updateSlotsContent() throws IOException {
 		availableSpace.set(rootPath.getFreeSpace());
 
 		final List<File> actualDirSlots = Arrays.asList(rootPath.listFiles(file -> file.isDirectory() & file.isHidden() == false & file.getName().startsWith(".") == false));
@@ -69,6 +64,11 @@ public class DestinationEntry extends BaseSourceDestEntry {
 			}
 		});
 		slotsCount.setValue(slots.size());
+	}
+
+	public Optional<File> searchCopyPresence(final String relativePath) {
+		// TODO searchCopyPresence
+		return Optional.empty();
 	}
 
 	class Slot {

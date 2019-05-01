@@ -23,14 +23,10 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import javafx.collections.ObservableList;
 
 public class BaseSourceDestEntry {
-	private static Logger log = LogManager.getLogger();
-
 	protected final File rootPath;
 
 	public BaseSourceDestEntry(final File rootPath) {

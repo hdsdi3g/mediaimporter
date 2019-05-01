@@ -17,7 +17,11 @@
 package tv.hd3g.mediaimporter;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -35,39 +39,80 @@ public class FileEntry {
 	private final SourceEntry source;
 	private final File file;
 	private final SimpleStringProperty status;
-	private final String driveSN;
+	private final String driveSN;// TODO in observable (permit lazy updates)
+	private final Map<DestinationEntry, CopyFileReference> copiesByDestination;
+	private final String relativePath;
+	private final List<DestinationEntry> destsList;
 
-	public FileEntry(final SourceEntry source, final File file, final String driveSN) {
+	public FileEntry(final SourceEntry source, final File file, final String driveSN, final List<DestinationEntry> destsList) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
 		this.file = Objects.requireNonNull(file, "\"file\" can't to be null");
 		this.driveSN = Objects.requireNonNull(driveSN, "\"driveSN\" can't to be null");
 		status = new SimpleStringProperty();
-		// TODO update status on create
+		copiesByDestination = new HashMap<>();
+		relativePath = file.getAbsolutePath().substring(source.rootPath.getAbsolutePath().length() + 1);
+		this.destsList = destsList;
 	}
 
-	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColSourceFactory() {
-		return param -> {
-			return new ReadOnlyObjectWrapper<>(param.getValue().source.rootPath.getPath() + " (" + param.getValue().driveSN + ")");
-		};
+	public void addDestination(final DestinationEntry destination) {
+		destination.searchCopyPresence(relativePath).ifPresentOrElse(copy -> {
+			if (copiesByDestination.containsKey(destination)) {
+				if (copiesByDestination.get(destination).equalsNotChanged(file)) {
+					return;
+				}
+			}
+			copiesByDestination.put(destination, new CopyFileReference(copy));
+			updateStatus();
+		}, () -> {
+			if (copiesByDestination.containsKey(destination)) {
+				copiesByDestination.remove(destination);
+			}
+			updateStatus();
+		});
 	}
 
-	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColPathFactory() {
-		return param -> {
-			final int len = param.getValue().source.rootPath.getAbsolutePath().length();
-			return new ReadOnlyObjectWrapper<>(param.getValue().file.getAbsolutePath().substring(len + 1));
-		};
+	public void removeDestination(final DestinationEntry oldDestination) {
+		if (copiesByDestination.remove(oldDestination) != null) {
+			updateStatus();
+		}
 	}
 
-	public static Callback<CellDataFeatures<FileEntry, Number>, ObservableValue<Number>> getColSizeFactory() {
-		return param -> {
-			return new ReadOnlyLongWrapper(param.getValue().getFile().length());
-		};
+	private class CopyFileReference {
+		private final File copy;
+		private final boolean sameSize;
+
+		CopyFileReference(final File copy) {
+			this.copy = Objects.requireNonNull(copy, "\"copy\" can't to be null");
+			sameSize = file.length() == copy.length();
+		}
+
+		boolean equalsNotChanged(final File candidate) {
+			return candidate.equals(copy) & candidate.length() == copy.length();
+		}
+
 	}
 
-	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColStatusFactory() {
-		return param -> {
-			return param.getValue().status;
-		};
+	private void updateStatus() {
+		final Predicate<CopyFileReference> isSameSize = c -> c.sameSize;
+
+		if (copiesByDestination.isEmpty()) {
+			status.setValue(MainApp.messages.getString("fileEntryStatusNew"));
+		} else {
+			final boolean isNotOnError = copiesByDestination.values().stream().allMatch(isSameSize);
+			if (copiesByDestination.size() == destsList.size()) {
+				if (isNotOnError) {
+					status.setValue(String.format(MainApp.messages.getString("fileEntryStatusDone"), copiesByDestination.size()));
+				} else {
+					final long inError = copiesByDestination.values().stream().filter(isSameSize.negate()).count();
+					status.setValue(String.format(MainApp.messages.getString("fileEntryStatusWithError"), inError, copiesByDestination.size()));
+				}
+			} else if (isNotOnError) {
+				final long inError = copiesByDestination.values().stream().filter(isSameSize.negate()).count();
+				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartialWithError"), inError, copiesByDestination.size(), destsList.size()));
+			} else {
+				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartial"), copiesByDestination.size(), destsList.size()));
+			}
+		}
 	}
 
 	@Override
@@ -108,4 +153,29 @@ public class FileEntry {
 		}
 		return true;
 	}
+
+	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColSourceFactory() {
+		return param -> {
+			return new ReadOnlyObjectWrapper<>(param.getValue().source.rootPath.getPath() + " (" + param.getValue().driveSN + ")");
+		};
+	}
+
+	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColPathFactory() {
+		return param -> {
+			return new ReadOnlyObjectWrapper<>(param.getValue().relativePath);
+		};
+	}
+
+	public static Callback<CellDataFeatures<FileEntry, Number>, ObservableValue<Number>> getColSizeFactory() {
+		return param -> {
+			return new ReadOnlyLongWrapper(param.getValue().getFile().length());
+		};
+	}
+
+	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColStatusFactory() {
+		return param -> {
+			return param.getValue().status;
+		};
+	}
+
 }
