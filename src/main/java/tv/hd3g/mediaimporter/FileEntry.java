@@ -17,11 +17,13 @@
 package tv.hd3g.mediaimporter;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,6 +34,7 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.util.Callback;
+import tv.hd3g.mediaimporter.DestinationEntry.Slot;
 
 public class FileEntry {
 	private static Logger log = LogManager.getLogger();
@@ -71,10 +74,25 @@ public class FileEntry {
 		});
 	}
 
+	public String getDriveSNValue() {
+		if (driveSN.isEmpty().get()) {
+			return MainApp.messages.getString("driveSNDefault");
+		}
+		return driveSN.getValue();
+	}
+
 	public void removeDestination(final DestinationEntry oldDestination) {
 		if (copiesByDestination.remove(oldDestination) != null) {
 			updateStatus();
 		}
+	}
+
+	public SourceEntry getSource() {
+		return source;
+	}
+
+	public String getRelativePath() {
+		return relativePath;
 	}
 
 	private class CopyFileReference {
@@ -92,9 +110,9 @@ public class FileEntry {
 
 	}
 
-	private void updateStatus() {
-		final Predicate<CopyFileReference> isSameSize = c -> c.sameSize;
+	private static final Predicate<CopyFileReference> isSameSize = c -> c.sameSize;
 
+	private void updateStatus() {
 		if (copiesByDestination.isEmpty()) {
 			status.setValue(MainApp.messages.getString("fileEntryStatusNew"));
 		} else {
@@ -113,6 +131,31 @@ public class FileEntry {
 				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartialWithError"), inError, copiesByDestination.size(), destsList.size()));
 			}
 		}
+	}
+
+	public static final Predicate<FileEntry> needsToBeCopied = fileEntry -> {
+		if (fileEntry.copiesByDestination.isEmpty()) {
+			return true;
+		} else {
+			return fileEntry.copiesByDestination.size() != fileEntry.destsList.size();
+		}
+	};
+
+	public List<Slot> getToCopyDestinationSlotList() {
+		return destsList.stream().filter(destination -> {
+			return copiesByDestination.containsKey(destination) == false;
+		}).map(destination -> {
+			try {
+				return destination.createSessionSlot();
+			} catch (final IOException e) {
+				MainApp.log4javaFx.error("Can't create session slot: please check destinations writing rights", e);
+				throw new RuntimeException("Can't create session slot", e);
+			}
+		}).collect(Collectors.toUnmodifiableList());
+	}
+
+	public SimpleStringProperty getStatus() {
+		return status;
 	}
 
 	@Override

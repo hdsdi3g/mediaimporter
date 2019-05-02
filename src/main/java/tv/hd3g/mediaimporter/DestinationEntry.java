@@ -18,12 +18,14 @@ package tv.hd3g.mediaimporter;
 
 import java.io.File;
 import java.io.FilenameFilter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -77,7 +79,13 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		return slots.stream().map(slot -> slot.getCopyPresenceInSlotCopiedDirs(relativePath)).filter(Optional::isPresent).map(Optional::get).findFirst();
 	}
 
-	class Slot {
+	public Slot createSessionSlot() throws IOException {
+		final Slot slot = new Slot(new File(rootPath.getPath() + File.separator + System.currentTimeMillis()));
+		FileUtils.forceMkdir(slot.slotRootDir);
+		return slot;
+	}
+
+	public class Slot {
 		private final File slotRootDir;
 
 		private Slot(final File dir) {
@@ -98,7 +106,9 @@ public class DestinationEntry extends BaseSourceDestEntry {
 			}).filter(File::exists).findFirst();
 		}
 
-		// TODO continue impl Slot
+		public File makePathFromRelativePath(final String driveSNValue, final String relativePath) {
+			return new File(slotRootDir.getPath() + File.separator + driveSNValue + File.separator + relativePath);
+		}
 	}
 
 	public static Callback<CellDataFeatures<DestinationEntry, File>, ObservableValue<File>> getColPathFactory() {

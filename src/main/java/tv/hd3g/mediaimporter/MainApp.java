@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -39,10 +40,13 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.control.Labeled;
 import javafx.scene.control.TableCell;
+import javafx.scene.control.TableRow;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
-import tv.hd3g.mediaimporter.driveprobe.DriveProbe;
+import tv.hd3g.mediaimporter.tools.DriveProbe;
+import tv.hd3g.mediaimporter.tools.NavigateTo;
 import tv.hd3g.processlauncher.cmdline.ExecutableFinder;
 import tv.hd3g.processlauncher.tool.ToolRunner;
 
@@ -62,7 +66,6 @@ public class MainApp extends Application {
 	private final ObservableList<FileEntry> fileList;
 	private final DriveProbe driveProbe;
 	private final ToolRunner toolRunner;
-	// private final ThreadPoolExecutor fileActionExecutor;
 	// private final ConfigurationStore configurationStore;
 
 	public MainApp() {
@@ -74,14 +77,7 @@ public class MainApp extends Application {
 		toolRunner = new ToolRunner(new ExecutableFinder(), 1);
 		/*configurationStore =*/ new ConfigurationStore("mediaimporter", sourcesList, destsList);
 
-		/*final AtomicLong counter = new AtomicLong();
-		fileActionExecutor = new ThreadPoolExecutor(1, 1, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
-			final Thread t = new Thread(r);
-			t.setPriority(Thread.MIN_PRIORITY);
-			t.setDaemon(true);
-			t.setName("JavaFX File async worker #" + counter.getAndIncrement());
-			return t;
-		});*/
+		driveProbe.getSNByMountedDrive(toolRunner);
 	}
 
 	private MainPanel mainPanel;
@@ -123,6 +119,39 @@ public class MainApp extends Application {
 		initDestZone();
 		initFileZone();
 		initActionZone();
+		initTablesRowFactory();
+	}
+
+	private void initTablesRowFactory() {
+		mainPanel.getTableSources().setRowFactory(tv -> {
+			final TableRow<SourceEntry> row = new TableRow<>();
+			row.setOnMouseClicked(mouseEvent -> {
+				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
+					NavigateTo.get().navigateTo(row.getItem().rootPath, toolRunner);
+				}
+			});
+			return row;
+		});
+
+		mainPanel.getTableDestinations().setRowFactory(tv -> {
+			final TableRow<DestinationEntry> row = new TableRow<>();
+			row.setOnMouseClicked(mouseEvent -> {
+				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
+					NavigateTo.get().navigateTo(row.getItem().rootPath, toolRunner);
+				}
+			});
+			return row;
+		});
+
+		mainPanel.getTableFiles().setRowFactory(tv -> {
+			final TableRow<FileEntry> row = new TableRow<>();
+			row.setOnMouseClicked(mouseEvent -> {
+				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
+					NavigateTo.get().navigateTo(row.getItem().getFile(), toolRunner);
+				}
+			});
+			return row;
+		});
 	}
 
 	@Override
@@ -322,20 +351,7 @@ public class MainApp extends Application {
 			log.info("Start scan source dirs");
 			mainPanel.getBtnClearScanlist().setDisable(true);
 
-			final CompletableFuture<Map<File, String>> cfLastProbeResult = driveProbe.getSNByMountedDrive(toolRunner).handle((lastProbeResult, error) -> {
-				if (lastProbeResult != null) {
-					return lastProbeResult;
-				} else {
-					log.error("Can't get S/N for all drives, retry", error);
-					return driveProbe.getSNByMountedDrive(toolRunner).handle((lastProbeResult2, error2) -> {
-						if (lastProbeResult2 != null) {
-							return lastProbeResult2;
-						} else {
-							throw new RuntimeException("Can't get S/N for all drives, after the 2nd try. Cancel.", error2);
-						}
-					}).join();
-				}
-			});
+			final CompletableFuture<Map<File, String>> cfLastProbeResult = driveProbe.getSNByMountedDrive(toolRunner);
 
 			sourcesList.forEach(entry -> {
 				try {
@@ -359,12 +375,23 @@ public class MainApp extends Application {
 					MainApp.log4javaFx.error("Can't scan " + entry, e);
 				}
 			});
+
+			final LongSummaryStatistics stats = fileList.stream().filter(FileEntry.needsToBeCopied).mapToLong(fileEntry -> fileEntry.getFile().length()).summaryStatistics();
+			if (stats.getCount() > 0) {
+				final String label = String.format(messages.getString("labelProgressReady"), stats.getCount(), FileUtils.byteCountToDisplaySize(stats.getSum()));
+				mainPanel.getLblProgressionCounter().setText(label);
+				mainPanel.getBtnStartCopy().setDisable(false);
+			}
+
 			mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
 		});
 		mainPanel.getBtnClearScanlist().setOnAction(event -> {
 			event.consume();
 			log.info("Clear scan list");
 			fileList.clear();
+			mainPanel.getBtnStartCopy().setDisable(true);
+			mainPanel.getBtnStopCopy().setDisable(true);
+			mainPanel.getLblProgressionCounter().setText("");
 		});
 	}
 
@@ -379,7 +406,6 @@ public class MainApp extends Application {
 			mainPanel.getBtnRemoveDestinationDir().setDisable(true);
 			mainPanel.getBtnAddSourceToScan().setDisable(true);
 			mainPanel.getBtnStopCopy().setDisable(false);
-			mainPanel.getBtnQuit().setDisable(true);
 		});
 		mainPanel.getBtnStopCopy().setOnAction(event -> {
 			event.consume(); // TODO StopCopy

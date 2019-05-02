@@ -14,22 +14,25 @@
  * Copyright (C) hdsdi3g for hd3g.tv 2019
  *
 */
-package tv.hd3g.mediaimporter.driveprobe;
+package tv.hd3g.mediaimporter.tools;
 
-import java.util.concurrent.ExecutionException;
+import java.io.File;
 
-import junit.framework.Assert;
-import junit.framework.TestCase;
-import tv.hd3g.processlauncher.cmdline.ExecutableFinder;
+import org.apache.commons.lang3.SystemUtils;
+
 import tv.hd3g.processlauncher.tool.ToolRunner;
 
-public class DriveProbeTest extends TestCase {
+public interface NavigateTo {
 
-	public void testGetSNByMountedDrive() throws InterruptedException, ExecutionException {
-		final DriveProbe probe = DriveProbe.get();
-		Assert.assertNotNull(probe);
+	void navigateTo(File selectedTarget, ToolRunner runner);
 
-		final ToolRunner runner = new ToolRunner(new ExecutableFinder(), 1);
-		System.out.println(probe.getSNByMountedDrive(runner));
+	static NavigateTo get() {
+		if (SystemUtils.IS_OS_MAC_OSX) {
+			throw new UnsupportedOperationException("macOS is not managed");
+		} else if (SystemUtils.IS_OS_LINUX) {
+			throw new UnsupportedOperationException("Linux is not managed");
+		}
+
+		return new WindowsNavigateTo();
 	}
 }
