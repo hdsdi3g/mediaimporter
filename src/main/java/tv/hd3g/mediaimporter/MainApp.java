@@ -24,13 +24,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ResourceBundle;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javafx.application.Application;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -185,6 +186,7 @@ public class MainApp extends Application {
 		mainPanel.getTableDestinationsColAvailable().setCellValueFactory(DestinationEntry.getColAvailableFactory());
 		mainPanel.getTableDestinationsColSpeed().setCellValueFactory(DestinationEntry.getColAvailableSpeed());
 		mainPanel.getTableDestinationsColSlots().setCellValueFactory(DestinationEntry.getColAvailableSlots());
+		destsList.forEach(DestinationEntry::updateSlotsContent);
 
 		mainPanel.getTableDestinationsColAvailable().setCellFactory(col -> new TableCell<>() {
 			public void updateItem(final Number value, final boolean empty) {
@@ -206,15 +208,11 @@ public class MainApp extends Application {
 				final DestinationEntry toAdd = new DestinationEntry(file);
 				if (destsList.contains(toAdd) == false) {
 					log.info("Add new dest directory: " + file);
-					try {
-						toAdd.updateSlotsContent();
-						destsList.add(toAdd);
-						fileList.forEach(fileEntry -> {
-							fileEntry.addDestination(toAdd);
-						});
-					} catch (final IOException e) {
-						MainApp.log4javaFx.error("Can't update destination " + toAdd.rootPath, e);
-					}
+					toAdd.updateSlotsContent();
+					destsList.add(toAdd);
+					fileList.forEach(fileEntry -> {
+						fileEntry.addDestination(toAdd);
+					});
 				}
 			});
 		});
@@ -304,6 +302,7 @@ public class MainApp extends Application {
 
 		mainPanel.getTableFiles().setItems(fileList);
 		mainPanel.getTableFilesColSource().setCellValueFactory(FileEntry.getColSourceFactory());
+		mainPanel.getTableFilesColDriveSN().setCellValueFactory(FileEntry.getColDriveSNFactory());
 		mainPanel.getTableFilesColPath().setCellValueFactory(FileEntry.getColPathFactory());
 		mainPanel.getTableFilesColSize().setCellValueFactory(FileEntry.getColSizeFactory());
 		mainPanel.getTableFilesColStatus().setCellValueFactory(FileEntry.getColStatusFactory());
@@ -317,30 +316,50 @@ public class MainApp extends Application {
 
 		mainPanel.getBtnAddSourceToScan().setOnAction(event -> {
 			event.consume();
+			if (sourcesList.isEmpty()) {
+				return;
+			}
 			log.info("Start scan source dirs");
 			mainPanel.getBtnClearScanlist().setDisable(true);
-			try {
-				final Map<File, String> lastProbeResult = driveProbe.getSNByMountedDrive(toolRunner);// TODO this async (blocking, with cancel+retry, and lazy update)
-				sourcesList.forEach(entry -> {
-					try {
-						final List<FileEntry> newFilesEntries = entry.scanSource(fileList, lastProbeResult, destsList); // TODO first a lazy set for lastProbeResult
 
-						if (newFilesEntries.isEmpty() == false) {
-							log.info("Found " + newFilesEntries.size() + " new file(s), start update copies references");
-							destsList.forEach(destination -> {
-								newFilesEntries.forEach(newFileEntry -> {
-									newFileEntry.addDestination(destination);
-								});
-							});
+			final CompletableFuture<Map<File, String>> cfLastProbeResult = driveProbe.getSNByMountedDrive(toolRunner).handle((lastProbeResult, error) -> {
+				if (lastProbeResult != null) {
+					return lastProbeResult;
+				} else {
+					log.error("Can't get S/N for all drives, retry", error);
+					return driveProbe.getSNByMountedDrive(toolRunner).handle((lastProbeResult2, error2) -> {
+						if (lastProbeResult2 != null) {
+							return lastProbeResult2;
+						} else {
+							throw new RuntimeException("Can't get S/N for all drives, after the 2nd try. Cancel.", error2);
 						}
-					} catch (final IOException e) {
-						MainApp.log4javaFx.error("Can't scan " + entry, e);
+					}).join();
+				}
+			});
+
+			sourcesList.forEach(entry -> {
+				try {
+					final SimpleStringProperty driveSN = new SimpleStringProperty();
+
+					cfLastProbeResult.thenAccept(lastProbeResult -> {
+						driveSN.set(lastProbeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), messages.getString("driveSNDefault")));
+					});
+
+					final List<FileEntry> newFilesEntries = entry.scanSource(fileList, driveSN, destsList);
+
+					if (newFilesEntries.isEmpty() == false) {
+						log.info("Found " + newFilesEntries.size() + " new file(s), start update copies references");
+						destsList.forEach(destination -> {
+							newFilesEntries.forEach(newFileEntry -> {
+								newFileEntry.addDestination(destination);
+							});
+						});
 					}
-				});
-				mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
-			} catch (InterruptedException | ExecutionException e1) {
-				MainApp.log4javaFx.error("Can't get S/N connected drives ", e1);
-			}
+				} catch (final IOException e) {
+					MainApp.log4javaFx.error("Can't scan " + entry, e);
+				}
+			});
+			mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
 		});
 		mainPanel.getBtnClearScanlist().setOnAction(event -> {
 			event.consume();

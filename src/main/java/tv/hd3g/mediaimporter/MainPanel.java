@@ -69,6 +69,8 @@ public class MainPanel {
 	@FXML
 	private TableColumn<FileEntry, String> tableFilesColSource;
 	@FXML
+	private TableColumn<FileEntry, String> tableFilesColDriveSN;
+	@FXML
 	private TableColumn<FileEntry, String> tableFilesColPath;
 	@FXML
 	private TableColumn<FileEntry, Number> tableFilesColSize;
@@ -155,6 +157,10 @@ public class MainPanel {
 
 	public TableColumn<FileEntry, String> getTableFilesColSource() {
 		return tableFilesColSource;
+	}
+
+	public TableColumn<FileEntry, String> getTableFilesColDriveSN() {
+		return tableFilesColDriveSN;
 	}
 
 	public TableColumn<FileEntry, String> getTableFilesColPath() {

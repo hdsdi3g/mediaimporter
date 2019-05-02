@@ -22,49 +22,63 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import tv.hd3g.processlauncher.ProcesslauncherBuilder;
 import tv.hd3g.processlauncher.cmdline.Parameters;
 import tv.hd3g.processlauncher.tool.ExecutableTool;
+import tv.hd3g.processlauncher.tool.RunningTool;
 import tv.hd3g.processlauncher.tool.ToolRunner;
 
 public class WindowsDriveProbe implements DriveProbe {
 
+	private final ScheduledExecutorService scheduledExecutor;
+
+	public WindowsDriveProbe() {
+		scheduledExecutor = Executors.newScheduledThreadPool(1);
+	}
+
 	@Override
-	public Map<File, String> getSNByMountedDrive(final ToolRunner runner) throws InterruptedException, ExecutionException {
+	public CompletableFuture<Map<File, String>> getSNByMountedDrive(final ToolRunner runner) {
+		final CompletableFuture<RunningTool<Diskdrive>> mapSNByDriveIdExecution = runner.execute(new Diskdrive());
+		final CompletableFuture<RunningTool<GetPartition>> partitionsExecution = runner.execute(new GetPartition());
 
-		final Map<String, String> mapSNByDriveId = runner.execute(new Diskdrive()).get().checkExecutionGetText().getStdoutLines(false).skip(1).map(line -> {
-			return Arrays.stream(line.split(" ")).filter(p -> p.equals("") == false).collect(Collectors.toUnmodifiableList());
-		}).collect(Collectors.toMap(line -> {
-			return line.get(0).split("\\\\")[2].toLowerCase();
-		}, line -> {
-			return line.get(1).replaceAll("\\.", "");
-		}));
-		// System.out.println(mapSNByDriveId);
+		return mapSNByDriveIdExecution.thenCombine(partitionsExecution, (mapSNByDriveIdRunner, partitionsRunner) -> {
+			final Map<String, String> mapSNByDriveId = mapSNByDriveIdRunner.checkExecutionGetText().getStdoutLines(false).skip(1).map(line -> {
+				return Arrays.stream(line.split(" ")).filter(p -> p.equals("") == false).collect(Collectors.toUnmodifiableList());
+			}).collect(Collectors.toMap(line -> {
+				return line.get(0).split("\\\\")[2].toLowerCase();
+			}, line -> {
+				return line.get(1).replaceAll("\\.", "");
+			}));
 
-		final List<String> partitions = runner.execute(new GetPartition()).get().checkExecutionGetText().getStdoutLines(false).collect(Collectors.toUnmodifiableList());
-		final Map<File, String> result = new HashMap<>();
+			final List<String> partitions = partitionsRunner.checkExecutionGetText().getStdoutLines(false).collect(Collectors.toUnmodifiableList());
+			final Map<File, String> result = new HashMap<>();
 
-		String lastDiskPath = null;
-		String lastDriveLetter = null;
-		for (int pos = 0; pos < partitions.size(); pos++) {
-			final String line = partitions.get(pos);
-			if (line.startsWith("DiskPath")) {
-				lastDiskPath = parseLine(line, true);
-			} else if (line.startsWith("DriveLetter")) {
-				lastDriveLetter = parseLine(line, true);
-				if (lastDriveLetter.equals("") == false) {
-					try {
-						final String diskPathid = lastDiskPath.split("#")[2].toLowerCase();
-						result.put(new File(lastDriveLetter + ":\\").getAbsoluteFile(), mapSNByDriveId.get(diskPathid));
-					} catch (final IndexOutOfBoundsException e) {
+			String lastDiskPath = null;
+			String lastDriveLetter = null;
+			for (int pos = 0; pos < partitions.size(); pos++) {
+				final String line = partitions.get(pos);
+				if (line.startsWith("DiskPath")) {
+					lastDiskPath = parseLine(line, true);
+				} else if (line.startsWith("DriveLetter")) {
+					lastDriveLetter = parseLine(line, true);
+					if (lastDriveLetter.equals("") == false) {
+						try {
+							final String diskPathid = lastDiskPath.split("#")[2].toLowerCase();
+							result.put(new File(lastDriveLetter + ":\\").getAbsoluteFile(), mapSNByDriveId.get(diskPathid));
+						} catch (final IndexOutOfBoundsException e) {
+						}
 					}
 				}
 			}
-		}
 
-		return Collections.unmodifiableMap(result);
+			return Collections.unmodifiableMap(result);
+		});
 	}
 
 	/**
@@ -97,6 +111,10 @@ public class WindowsDriveProbe implements DriveProbe {
 			return "powershell";
 		}
 
+		@Override
+		public void beforeRun(final ProcesslauncherBuilder processBuilder) {
+			processBuilder.setExecutionTimeLimiter(5, TimeUnit.SECONDS, scheduledExecutor);
+		}
 	}
 
 	class Diskdrive implements ExecutableTool {
@@ -111,6 +129,11 @@ public class WindowsDriveProbe implements DriveProbe {
 		@Override
 		public String getExecutableName() {
 			return "wmic";
+		}
+
+		@Override
+		public void beforeRun(final ProcesslauncherBuilder processBuilder) {
+			processBuilder.setExecutionTimeLimiter(5, TimeUnit.SECONDS, scheduledExecutor);
 		}
 
 	}

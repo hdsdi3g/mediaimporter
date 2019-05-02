@@ -17,7 +17,7 @@
 package tv.hd3g.mediaimporter;
 
 import java.io.File;
-import java.io.IOException;
+import java.io.FilenameFilter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -31,6 +31,9 @@ import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleLongProperty;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
+import javafx.collections.ObservableList;
 import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.util.Callback;
 
@@ -39,21 +42,24 @@ public class DestinationEntry extends BaseSourceDestEntry {
 
 	private final SimpleLongProperty availableSpace;
 	private final SimpleLongProperty writeSpeed;
-	private final SimpleIntegerProperty slotsCount;
-	private final List<Slot> slots;
+	private final ObservableList<Slot> slots;
 
 	public DestinationEntry(final File rootPath) {
 		super(rootPath);
 		availableSpace = new SimpleLongProperty(rootPath.getFreeSpace());
 		writeSpeed = new SimpleLongProperty(0);
-		slotsCount = new SimpleIntegerProperty(0);
-		slots = new ArrayList<>();
+		slots = FXCollections.observableList(new ArrayList<>());
 	}
 
-	public void updateSlotsContent() throws IOException {
+	private static final FilenameFilter validDirNonHidden = (dir, name) -> {
+		final File file = new File(dir.getPath() + File.separator + name);
+		return file.isDirectory() & file.isHidden() == false & file.getName().startsWith(".") == false;
+	};
+
+	public void updateSlotsContent() {
 		availableSpace.set(rootPath.getFreeSpace());
 
-		final List<File> actualDirSlots = Arrays.asList(rootPath.listFiles(file -> file.isDirectory() & file.isHidden() == false & file.getName().startsWith(".") == false));
+		final List<File> actualDirSlots = Arrays.asList(rootPath.listFiles(validDirNonHidden));
 
 		slots.removeIf(slot -> {
 			return actualDirSlots.contains(slot.getDir()) == false;
@@ -63,24 +69,35 @@ public class DestinationEntry extends BaseSourceDestEntry {
 				slots.add(new Slot(dir));
 			}
 		});
-		slotsCount.setValue(slots.size());
+
+		slots.sort((l, r) -> Long.compare(l.slotRootDir.lastModified(), r.slotRootDir.lastModified()));
 	}
 
 	public Optional<File> searchCopyPresence(final String relativePath) {
-		// TODO searchCopyPresence
-		return Optional.empty();
+		return slots.stream().map(slot -> slot.getCopyPresenceInSlotCopiedDirs(relativePath)).filter(Optional::isPresent).map(Optional::get).findFirst();
 	}
 
 	class Slot {
-		private final File dir;
+		private final File slotRootDir;
 
 		private Slot(final File dir) {
-			this.dir = Objects.requireNonNull(dir, "\"dir\" can't to be null");
+			slotRootDir = Objects.requireNonNull(dir, "\"slotRootDir\" can't to be null");
 		}
 
-		public File getDir() {
-			return dir;
+		File getDir() {
+			return slotRootDir;
 		}
+
+		List<File> getCopiedListRootDirs() {
+			return Arrays.asList(slotRootDir.listFiles(validDirNonHidden));
+		}
+
+		Optional<File> getCopyPresenceInSlotCopiedDirs(final String relativePath) {
+			return getCopiedListRootDirs().stream().map(copiedRootDir -> {
+				return new File(copiedRootDir.getPath() + File.separator + relativePath);
+			}).filter(File::exists).findFirst();
+		}
+
 		// TODO continue impl Slot
 	}
 
@@ -104,7 +121,13 @@ public class DestinationEntry extends BaseSourceDestEntry {
 
 	public static Callback<CellDataFeatures<DestinationEntry, Number>, ObservableValue<Number>> getColAvailableSlots() {
 		return param -> {
-			return param.getValue().slotsCount;
+			final SimpleIntegerProperty size = new SimpleIntegerProperty(param.getValue().slots.size());
+			param.getValue().slots.addListener((ListChangeListener<Slot>) change -> {
+				while (change.next()) {
+					size.set(change.getList().size());
+				}
+			});
+			return size;
 		};
 	}
 

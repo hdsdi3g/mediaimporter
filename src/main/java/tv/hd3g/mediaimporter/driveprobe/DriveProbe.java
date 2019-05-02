@@ -18,7 +18,7 @@ package tv.hd3g.mediaimporter.driveprobe;
 
 import java.io.File;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang3.SystemUtils;
 
@@ -26,7 +26,7 @@ import tv.hd3g.processlauncher.tool.ToolRunner;
 
 public interface DriveProbe {
 
-	Map<File, String> getSNByMountedDrive(ToolRunner runner) throws InterruptedException, ExecutionException;
+	CompletableFuture<Map<File, String>> getSNByMountedDrive(ToolRunner runner);
 
 	static DriveProbe get() {
 		if (SystemUtils.IS_OS_WINDOWS_7) {

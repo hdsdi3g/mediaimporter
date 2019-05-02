@@ -39,12 +39,12 @@ public class FileEntry {
 	private final SourceEntry source;
 	private final File file;
 	private final SimpleStringProperty status;
-	private final String driveSN;// TODO in observable (permit lazy updates)
+	private final SimpleStringProperty driveSN;
 	private final Map<DestinationEntry, CopyFileReference> copiesByDestination;
 	private final String relativePath;
 	private final List<DestinationEntry> destsList;
 
-	public FileEntry(final SourceEntry source, final File file, final String driveSN, final List<DestinationEntry> destsList) {
+	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
 		this.file = Objects.requireNonNull(file, "\"file\" can't to be null");
 		this.driveSN = Objects.requireNonNull(driveSN, "\"driveSN\" can't to be null");
@@ -107,10 +107,10 @@ public class FileEntry {
 					status.setValue(String.format(MainApp.messages.getString("fileEntryStatusWithError"), inError, copiesByDestination.size()));
 				}
 			} else if (isNotOnError) {
+				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartial"), copiesByDestination.size(), destsList.size()));
+			} else {
 				final long inError = copiesByDestination.values().stream().filter(isSameSize.negate()).count();
 				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartialWithError"), inError, copiesByDestination.size(), destsList.size()));
-			} else {
-				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartial"), copiesByDestination.size(), destsList.size()));
 			}
 		}
 	}
@@ -156,7 +156,13 @@ public class FileEntry {
 
 	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColSourceFactory() {
 		return param -> {
-			return new ReadOnlyObjectWrapper<>(param.getValue().source.rootPath.getPath() + " (" + param.getValue().driveSN + ")");
+			return new ReadOnlyObjectWrapper<>(param.getValue().source.rootPath.getPath());
+		};
+	}
+
+	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColDriveSNFactory() {
+		return param -> {
+			return param.getValue().driveSN;
 		};
 	}
 

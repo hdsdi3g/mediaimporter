@@ -61,9 +61,10 @@
                   <TableView fx:id="tableFiles" prefHeight="270.0" prefWidth="805.0" BorderPane.alignment="CENTER">
                     <columns>
                       <TableColumn fx:id="tableFilesColSource" editable="false" prefWidth="157.7142943739891" text="Source path" />
-                      <TableColumn fx:id="tableFilesColPath" editable="false" minWidth="0.0" prefWidth="338.8571472167969" text="File path" />
+                        <TableColumn fx:id="tableFilesColDriveSN" editable="false" minWidth="0.0" prefWidth="28.57135009765625" sortable="false" text="Drive S/N" />
+                      <TableColumn fx:id="tableFilesColPath" editable="false" minWidth="0.0" prefWidth="343.42860412597656" text="File path" />
                         <TableColumn fx:id="tableFilesColSize" editable="false" minWidth="0.0" prefWidth="62.2857666015625" sortable="false" text="Size" />
-                        <TableColumn fx:id="tableFilesColStatus" editable="false" minWidth="0.0" prefWidth="242.85711669921875" text="Status" />
+                        <TableColumn fx:id="tableFilesColStatus" editable="false" minWidth="0.0" prefWidth="206.8570556640625" text="Status" />
                     </columns>
                   </TableView>
                </center>

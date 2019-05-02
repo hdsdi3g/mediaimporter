@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -29,6 +28,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
 import javafx.scene.control.TableColumn.CellDataFeatures;
@@ -50,7 +50,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 	/**
 	 * @return new file entries.
 	 */
-	public List<FileEntry> scanSource(final ObservableList<FileEntry> fileList, final Map<File, String> lastProbeResult, final List<DestinationEntry> destsList) throws IOException {
+	public List<FileEntry> scanSource(final ObservableList<FileEntry> fileList, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList) throws IOException {
 		final Set<FileEntry> actualFileEntrySet = fileList.stream().distinct().collect(Collectors.toSet());
 		if (fileList.size() != actualFileEntrySet.size()) {
 			/**
@@ -73,7 +73,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 			}
 			return true;
 		}).sorted().peek(founded -> actualFileSet.add(founded)).map(founded -> {
-			final FileEntry newFileEntry = new FileEntry(this, founded, lastProbeResult.getOrDefault(rootPath.toPath().getRoot().toFile(), "Unknow"), destsList);
+			final FileEntry newFileEntry = new FileEntry(this, founded, driveSN, destsList);
 			fileList.add(newFileEntry);
 			return newFileEntry;
 		}).collect(Collectors.toUnmodifiableList());
