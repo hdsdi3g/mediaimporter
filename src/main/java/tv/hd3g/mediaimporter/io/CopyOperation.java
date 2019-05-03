@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
@@ -44,14 +45,16 @@ public class CopyOperation implements Runnable {
 	private static final Set<OpenOption> OPEN_OPTIONS_READ_WRITE_NEW = Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
 
 	private final FileEntry entryToCopy;
+	private final Consumer<Integer> onProgress;
 	private final List<Slot> destinationListToCopy;
 	private final ByteBuffer buffer;
 	private volatile boolean wantToStop;
 
 	private final Path source;
 
-	public CopyOperation(final FileEntry entryToCopy) throws IOException {
+	public CopyOperation(final FileEntry entryToCopy, final Consumer<Integer> onProgress) throws IOException {
 		this.entryToCopy = entryToCopy;
+		this.onProgress = onProgress;
 		wantToStop = false;
 		source = entryToCopy.getFile().toPath();
 		buffer = ByteBuffer.allocateDirect((int) Files.getFileStore(source).getBlockSize() * 32);
@@ -89,10 +92,12 @@ public class CopyOperation implements Runnable {
 					return;
 				}
 				buffer.flip();
-				final int toRead = buffer.remaining();// TODO display progression in UI
+				onProgress.accept(buffer.remaining());
 
 				for (final FileChannel destinationChannel : destinationChannels.keySet()) {
 					destinationChannel.write(buffer.asReadOnlyBuffer());
+					// TODO update DestEntry Perfs
+					// TODO update fileEntry status
 					if (wantToStop == true) {
 						return;
 					}

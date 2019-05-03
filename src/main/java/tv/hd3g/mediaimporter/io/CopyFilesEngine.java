@@ -23,6 +23,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
@@ -35,15 +36,36 @@ public class CopyFilesEngine {
 
 	private final List<CopyOperation> copyList;
 	private final ThreadPoolExecutor mainExecutor;
+	private final ThreadPoolExecutor progressExecutor;
 	private CompletableFuture<?> allTasks;
+	private final long dataSizeToCopyBytes;
+	private long startTimeMsec;
+	private volatile GlobalCopyProgress lastGlobalCopyProgress;
 
 	/**
 	 * No reusable
 	 */
 	public CopyFilesEngine(final List<FileEntry> toCopy) {
+
+		progressExecutor = new ThreadPoolExecutor(1, 1, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
+			final Thread t = new Thread(r);
+			t.setPriority(Thread.MIN_PRIORITY);
+			t.setDaemon(true);
+			t.setName("OnProgress");
+			return t;
+		});
+
+		final Consumer<Integer> onCopyProgress = readSize -> {
+			final long dateMsec = System.currentTimeMillis();
+			final CompletableFuture<GlobalCopyProgress> c = CompletableFuture.supplyAsync(() -> {
+				return new GlobalCopyProgress(readSize.longValue(), dateMsec);
+			}, progressExecutor);
+			// TODO callback c.thenAccept(action) + Platform.runLater
+		};
+
 		copyList = toCopy.stream().map(fileEntry -> {
 			try {
-				return new CopyOperation(fileEntry);
+				return new CopyOperation(fileEntry, onCopyProgress);
 			} catch (final IOException e) {
 				throw new RuntimeException("Can't prepare copy operation with " + fileEntry, e);
 			}
@@ -58,6 +80,8 @@ public class CopyFilesEngine {
 			return t;
 		});
 		allTasks = CompletableFuture.failedFuture(new NullPointerException("Never started"));
+
+		dataSizeToCopyBytes = 0l; // TODO compute
 	}
 
 	/**
@@ -65,6 +89,7 @@ public class CopyFilesEngine {
 	 */
 	public CompletableFuture<?> asyncStart() {
 		log.info("Put " + copyList.size() + " item(s) in queue for copy");
+		startTimeMsec = System.currentTimeMillis();
 
 		final CompletableFuture<?>[] allOperations = new CompletableFuture<?>[copyList.size()];
 
@@ -93,6 +118,37 @@ public class CopyFilesEngine {
 			copyOperation.switchStop();
 		});
 		CompletableFuture.runAsync(onDone, mainExecutor).thenAcceptAsync(v -> mainExecutor.shutdown());
+	}
+
+	public CompletableFuture<?> getAllTasks() {
+		return allTasks;
+	}
+
+	public class GlobalCopyProgress {
+
+		public final double instantSpeedBytesPerSec;
+		public final double meanSpeedBytesPerSec;
+		public final long positionBytes;
+		public final long dateMsec;
+		public final long timeElapsedMsec;
+
+		private GlobalCopyProgress(final long dataSizeReadForLastLoopBytes, final long dateMsec) {
+			this.dateMsec = dateMsec;
+			timeElapsedMsec = dateMsec - startTimeMsec;
+
+			if (lastGlobalCopyProgress == null) {
+				positionBytes = dataSizeReadForLastLoopBytes;
+				instantSpeedBytesPerSec = (double) positionBytes / timeElapsedMsec / 1000d;
+			} else {
+				positionBytes = lastGlobalCopyProgress.positionBytes + dataSizeReadForLastLoopBytes;
+				instantSpeedBytesPerSec = (double) (positionBytes - lastGlobalCopyProgress.positionBytes) / (double) (dateMsec - lastGlobalCopyProgress.dateMsec) / 1000d;
+			}
+			meanSpeedBytesPerSec = (double) positionBytes / (double) timeElapsedMsec / 1000d;
+			lastGlobalCopyProgress = this;
+
+			// TODO compute ETA with dataSizeToCopyBytes
+		}
+
 	}
 
 }
