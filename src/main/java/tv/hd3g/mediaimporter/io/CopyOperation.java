@@ -28,13 +28,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javafx.application.Platform;
 import tv.hd3g.mediaimporter.DestinationEntry.Slot;
 import tv.hd3g.mediaimporter.FileEntry;
 
@@ -45,19 +46,23 @@ public class CopyOperation implements Runnable {
 	private static final Set<OpenOption> OPEN_OPTIONS_READ_WRITE_NEW = Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
 
 	private final FileEntry entryToCopy;
-	private final Consumer<Integer> onProgress;
+	private final BiConsumer<CopyOperation, Integer> onProgress;
 	private final List<Slot> destinationListToCopy;
 	private final ByteBuffer buffer;
 	private volatile boolean wantToStop;
 
 	private final Path source;
 
-	public CopyOperation(final FileEntry entryToCopy, final Consumer<Integer> onProgress) throws IOException {
+	public CopyOperation(final FileEntry entryToCopy, final BiConsumer<CopyOperation, Integer> onProgress) throws IOException {
 		this.entryToCopy = entryToCopy;
 		this.onProgress = onProgress;
 		wantToStop = false;
 		source = entryToCopy.getFile().toPath();
-		buffer = ByteBuffer.allocateDirect((int) Files.getFileStore(source).getBlockSize() * 32);
+
+		/**
+		 * BlockSize = 512
+		 */
+		buffer = ByteBuffer.allocateDirect((int) Files.getFileStore(source).getBlockSize() * 256);
 		destinationListToCopy = entryToCopy.getToCopyDestinationSlotList();
 	}
 
@@ -75,7 +80,7 @@ public class CopyOperation implements Runnable {
 				FileUtils.forceMkdirParent(fileDestination);
 			} catch (final IOException e) {
 				throw new RuntimeException("Can't prepare copy operation to " + fileDestination, e);
-				// TODO verbose in UI
+				// TODO display in UI
 			}
 			return fileDestination.toPath();
 		}, slot -> slot));
@@ -92,7 +97,7 @@ public class CopyOperation implements Runnable {
 					return;
 				}
 				buffer.flip();
-				onProgress.accept(buffer.remaining());
+				onProgress.accept(this, buffer.remaining());
 
 				for (final FileChannel destinationChannel : destinationChannels.keySet()) {
 					destinationChannel.write(buffer.asReadOnlyBuffer());
@@ -105,9 +110,13 @@ public class CopyOperation implements Runnable {
 				buffer.clear();
 			}
 
-			for (final FileChannel destinationChannel : destinationChannels.keySet()) {
+			Platform.runLater(() -> {
+				entryToCopy.updateState();
+			});
+
+			/*for (final FileChannel destinationChannel : destinationChannels.keySet()) {
 				destinationChannel.force(true);
-			}
+			}*/
 		} catch (final IOException e) {
 			log.error("Can't open source file " + source, e); // TODO display in UI
 		} finally {
@@ -122,8 +131,46 @@ public class CopyOperation implements Runnable {
 		buffer.asReadOnlyBuffer();
 	}
 
+	public long getSourceLength() {
+		return source.toFile().length();
+	}
+
+	public Path getSourcePath() {
+		return source;
+	}
+
 	public void switchStop() {
 		wantToStop = true;
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + (source == null ? 0 : source.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(final Object obj) {
+		if (this == obj) {
+			return true;
+		}
+		if (obj == null) {
+			return false;
+		}
+		if (!(obj instanceof CopyOperation)) {
+			return false;
+		}
+		final CopyOperation other = (CopyOperation) obj;
+		if (source == null) {
+			if (other.source != null) {
+				return false;
+			}
+		} else if (!source.equals(other.source)) {
+			return false;
+		}
+		return true;
 	}
 
 }

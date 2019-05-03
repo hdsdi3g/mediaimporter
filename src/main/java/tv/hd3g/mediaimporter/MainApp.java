@@ -32,6 +32,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -47,6 +48,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import tv.hd3g.mediaimporter.io.CopyFilesEngine;
+import tv.hd3g.mediaimporter.io.CopyFilesEngine.GlobalCopyProgress;
 import tv.hd3g.mediaimporter.tools.DriveProbe;
 import tv.hd3g.mediaimporter.tools.NavigateTo;
 import tv.hd3g.processlauncher.cmdline.ExecutableFinder;
@@ -79,7 +81,7 @@ public class MainApp extends Application {
 		driveProbe = DriveProbe.get();
 		toolRunner = new ToolRunner(new ExecutableFinder(), 1);
 		/*configurationStore =*/ new ConfigurationStore("mediaimporter", sourcesList, destsList);
-		currentCopyEngine = new SimpleObjectProperty<>();
+		currentCopyEngine = new SimpleObjectProperty<>(null);
 		driveProbe.getSNByMountedDrive(toolRunner);
 	}
 
@@ -107,7 +109,7 @@ public class MainApp extends Application {
 
 		primaryStage.setOnCloseRequest(event -> {
 			event.consume();
-			if (currentCopyEngine.isBound()) {
+			if (currentCopyEngine.isNotNull().get()) {
 				currentCopyEngine.get().asyncStop(() -> {
 				});
 			}
@@ -116,7 +118,7 @@ public class MainApp extends Application {
 		mainPanel.getBtnQuit().setOnAction(event -> {
 			event.consume();
 			log.debug("Want to close");
-			if (currentCopyEngine.isBound()) {
+			if (currentCopyEngine.isNotNull().get()) {
 				currentCopyEngine.get().asyncStop(() -> {
 				});
 			}
@@ -362,6 +364,10 @@ public class MainApp extends Application {
 
 			final CompletableFuture<Map<File, String>> cfLastProbeResult = driveProbe.getSNByMountedDrive(toolRunner);
 
+			fileList.removeIf(fileEntry -> {
+				return fileEntry.updateState();
+			});
+
 			sourcesList.forEach(entry -> {
 				try {
 					final SimpleStringProperty driveSN = new SimpleStringProperty();
@@ -369,7 +375,6 @@ public class MainApp extends Application {
 					cfLastProbeResult.thenAccept(lastProbeResult -> {
 						driveSN.set(lastProbeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), messages.getString("driveSNDefault")));
 					});
-
 					final List<FileEntry> newFilesEntries = entry.scanSource(fileList, driveSN, destsList);
 
 					if (newFilesEntries.isEmpty() == false) {
@@ -406,18 +411,22 @@ public class MainApp extends Application {
 
 	private void initActionZone() {
 		mainPanel.getBtnStartCopy().setOnAction(event -> {
-			event.consume(); // TODO StartCopy
-			if (currentCopyEngine.isBound()) {
+			event.consume();
+			if (currentCopyEngine.isNotNull().get()) {
 				log4javaFx.error("Can't create a new copy operation");
 				return;
 			}
 
-			log.info("Prepare and start copy operation"); // TODO with more informations
+			destsList.forEach(dest -> {
+				try {
+					dest.prepareNewSessionSlot();
+				} catch (final IOException e) {
+					MainApp.log4javaFx.error("Can't create session slot: please check destinations writing rights", e);
+					throw new RuntimeException("Can't create session slot", e);
+				}
+			});
 
-			currentCopyEngine.set(new CopyFilesEngine(fileList));
-			final CompletableFuture<?> allRunTasks = currentCopyEngine.get().asyncStart();
-
-			// TODO watch allRunTasks
+			log.info("Prepare and start copy operation");
 
 			mainPanel.getBtnAddSourceDir().setDisable(true);
 			mainPanel.getBtnRemoveSourceDir().setDisable(true);
@@ -426,12 +435,61 @@ public class MainApp extends Application {
 			mainPanel.getBtnAddSourceToScan().setDisable(true);
 			mainPanel.getBtnStartCopy().setDisable(true);
 			mainPanel.getBtnStopCopy().setDisable(false);
+			mainPanel.getProgressBar().setProgress(-1);
+
+			try {
+				final CopyFilesEngine copyFilesEngine = new CopyFilesEngine(fileList, copyProgress -> {
+					Platform.runLater(() -> {
+						updateStateOnGlobalProgress(copyProgress);
+					});
+				});
+
+				currentCopyEngine.set(copyFilesEngine);
+				copyFilesEngine.asyncStart().thenRunAsync(() -> {
+					Platform.runLater(() -> {
+						resetStatesAfterCopyOperation();
+					});
+				});
+			} catch (final Exception e) {
+				log4javaFx.error("Can't process copy operation", e);
+				resetStatesAfterCopyOperation();
+			}
 		});
 		mainPanel.getBtnStopCopy().setOnAction(event -> {
-			event.consume(); // TODO StopCopy
-			log.debug("");
+			event.consume();
+			if (currentCopyEngine.isNull().get()) {
+				return;
+			}
+			log.info("Manual stop copy action");
 
+			currentCopyEngine.get().asyncStop(() -> {
+				Platform.runLater(() -> {
+					resetStatesAfterCopyOperation();
+				});
+			});
 		});
+	}
+
+	private void updateStateOnGlobalProgress(final GlobalCopyProgress globalProgress) {
+		mainPanel.getProgressBar().setProgress(globalProgress.getProgressRate());
+		mainPanel.getLblProgressionCounter().setText(globalProgress.getProgressionCounterText(messages.getString("labelProgressProcess")));
+		mainPanel.getLblEta().setText(globalProgress.getETA());
+		mainPanel.getLblSpeedCopy().setText(globalProgress.getSpeedCopy(messages.getString("labelProgressSpeed")));
+	}
+
+	private void resetStatesAfterCopyOperation() {
+		currentCopyEngine.setValue(null);
+		mainPanel.getBtnAddSourceDir().setDisable(false);
+		mainPanel.getBtnRemoveSourceDir().setDisable(false);
+		mainPanel.getBtnAddDestinationDir().setDisable(false);
+		mainPanel.getBtnRemoveDestinationDir().setDisable(false);
+		mainPanel.getBtnAddSourceToScan().setDisable(false);
+		mainPanel.getBtnStartCopy().setDisable(false);
+		mainPanel.getBtnStopCopy().setDisable(true);
+
+		mainPanel.getProgressBar().setProgress(0);
+		mainPanel.getLblEta().setText("");
+		mainPanel.getLblSpeedCopy().setText("");
 	}
 
 }

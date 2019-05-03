@@ -17,7 +17,6 @@
 package tv.hd3g.mediaimporter;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +71,20 @@ public class FileEntry {
 			}
 			updateStatus();
 		});
+	}
+
+	/**
+	 * @return true for remove
+	 */
+	public boolean updateState() {
+		if (file.exists() == false) {
+			return true;
+		}
+		copiesByDestination.clear();
+		destsList.forEach(destination -> {
+			addDestination(destination);
+		});
+		return false;
 	}
 
 	public String getDriveSNValue() {
@@ -145,12 +158,7 @@ public class FileEntry {
 		return destsList.stream().filter(destination -> {
 			return copiesByDestination.containsKey(destination) == false;
 		}).map(destination -> {
-			try {
-				return destination.createSessionSlot();
-			} catch (final IOException e) {
-				MainApp.log4javaFx.error("Can't create session slot: please check destinations writing rights", e);
-				throw new RuntimeException("Can't create session slot", e);
-			}
+			return destination.getCurrentSessionSlot();
 		}).collect(Collectors.toUnmodifiableList());
 	}
 

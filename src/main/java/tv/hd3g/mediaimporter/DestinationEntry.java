@@ -45,6 +45,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 	private final SimpleLongProperty availableSpace;
 	private final SimpleLongProperty writeSpeed;
 	private final ObservableList<Slot> slots;
+	private Slot currentSessionSlot;
 
 	public DestinationEntry(final File rootPath) {
 		super(rootPath);
@@ -79,10 +80,16 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		return slots.stream().map(slot -> slot.getCopyPresenceInSlotCopiedDirs(relativePath)).filter(Optional::isPresent).map(Optional::get).findFirst();
 	}
 
-	public Slot createSessionSlot() throws IOException {
-		final Slot slot = new Slot(new File(rootPath.getPath() + File.separator + System.currentTimeMillis()));
-		FileUtils.forceMkdir(slot.slotRootDir);
-		return slot;
+	public DestinationEntry prepareNewSessionSlot() throws IOException {
+		currentSessionSlot = new Slot(new File(rootPath.getPath() + File.separator + System.currentTimeMillis()));// TODO real date...
+		FileUtils.forceMkdir(currentSessionSlot.slotRootDir);
+		slots.add(currentSessionSlot);
+		return this;
+	}
+
+	public Slot getCurrentSessionSlot() {
+		Objects.requireNonNull(currentSessionSlot, "\"currentSessionSlot\" can't to be null");
+		return currentSessionSlot;
 	}
 
 	public class Slot {
