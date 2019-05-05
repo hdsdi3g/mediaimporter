@@ -17,15 +17,17 @@
 package tv.hd3g.mediaimporter;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.time.DurationFormatUtils;
 
 import javafx.beans.property.ReadOnlyLongWrapper;
 import javafx.beans.property.ReadOnlyObjectWrapper;
@@ -36,7 +38,6 @@ import javafx.util.Callback;
 import tv.hd3g.mediaimporter.DestinationEntry.Slot;
 
 public class FileEntry {
-	private static Logger log = LogManager.getLogger();
 
 	private final SourceEntry source;
 	private final File file;
@@ -45,6 +46,7 @@ public class FileEntry {
 	private final Map<DestinationEntry, CopyFileReference> copiesByDestination;
 	private final String relativePath;
 	private final List<DestinationEntry> destsList;
+	private IOException lastCopyError;
 
 	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
@@ -126,7 +128,9 @@ public class FileEntry {
 	private static final Predicate<CopyFileReference> isSameSize = c -> c.sameSize;
 
 	private void updateStatus() {
-		if (copiesByDestination.isEmpty()) {
+		if (lastCopyError != null) {
+			status.set("Error: " + lastCopyError.getMessage());
+		} else if (copiesByDestination.isEmpty()) {
 			status.setValue(MainApp.messages.getString("fileEntryStatusNew"));
 		} else {
 			final boolean isNotOnError = copiesByDestination.values().stream().allMatch(isSameSize);
@@ -144,6 +148,20 @@ public class FileEntry {
 				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartialWithError"), inError, copiesByDestination.size(), destsList.size()));
 			}
 		}
+	}
+
+	public void updateCopyProgression(final long currentEtaMsec, final long meanSpeed, final long readedBytes, final Optional<IOException> lastError) {
+		lastError.ifPresentOrElse(e -> {
+			synchronized (this) {
+				lastCopyError = e;
+			}
+			status.set("Error: " + e.getMessage());
+		}, () -> {
+			final String readed = FileUtils.byteCountToDisplaySize(readedBytes);
+			final String speed = FileUtils.byteCountToDisplaySize(meanSpeed);
+			final String eta = DurationFormatUtils.formatDuration(currentEtaMsec, "HH:mm:ss");
+			status.set(String.format(MainApp.messages.getString("fileEntryStatusProgress"), readed, speed, eta));
+		});
 	}
 
 	public static final Predicate<FileEntry> needsToBeCopied = fileEntry -> {

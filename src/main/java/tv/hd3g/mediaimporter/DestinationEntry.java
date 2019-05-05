@@ -19,15 +19,15 @@ package tv.hd3g.mediaimporter;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -40,10 +40,12 @@ import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.util.Callback;
 
 public class DestinationEntry extends BaseSourceDestEntry {
-	private static Logger log = LogManager.getLogger();
 
 	private final SimpleLongProperty availableSpace;
 	private final SimpleLongProperty writeSpeed;
+	private final AtomicLong copiedDatasBytes;
+	private final AtomicLong copiedDurationsNanoSec;
+
 	private final ObservableList<Slot> slots;
 	private Slot currentSessionSlot;
 
@@ -52,6 +54,8 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		availableSpace = new SimpleLongProperty(rootPath.getFreeSpace());
 		writeSpeed = new SimpleLongProperty(0);
 		slots = FXCollections.observableList(new ArrayList<>());
+		copiedDatasBytes = new AtomicLong(0);
+		copiedDurationsNanoSec = new AtomicLong(0);
 	}
 
 	private static final FilenameFilter validDirNonHidden = (dir, name) -> {
@@ -69,7 +73,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		});
 		actualDirSlots.forEach(dir -> {
 			if (slots.stream().map(Slot::getDir).noneMatch(slotDir -> slotDir.getAbsoluteFile().equals(dir.getAbsoluteFile()))) {
-				slots.add(new Slot(dir));
+				slots.add(new Slot(this, dir));
 			}
 		});
 
@@ -80,8 +84,10 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		return slots.stream().map(slot -> slot.getCopyPresenceInSlotCopiedDirs(relativePath)).filter(Optional::isPresent).map(Optional::get).findFirst();
 	}
 
+	private static final SimpleDateFormat slotBaseNameDate = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
+
 	public DestinationEntry prepareNewSessionSlot() throws IOException {
-		currentSessionSlot = new Slot(new File(rootPath.getPath() + File.separator + System.currentTimeMillis()));// TODO real date...
+		currentSessionSlot = new Slot(this, new File(rootPath.getPath() + File.separator + slotBaseNameDate.format(System.currentTimeMillis())));
 		FileUtils.forceMkdir(currentSessionSlot.slotRootDir);
 		slots.add(currentSessionSlot);
 		return this;
@@ -94,8 +100,10 @@ public class DestinationEntry extends BaseSourceDestEntry {
 
 	public class Slot {
 		private final File slotRootDir;
+		private final DestinationEntry referer;
 
-		private Slot(final File dir) {
+		private Slot(final DestinationEntry referer, final File dir) {
+			this.referer = referer;
 			slotRootDir = Objects.requireNonNull(dir, "\"slotRootDir\" can't to be null");
 		}
 
@@ -115,6 +123,64 @@ public class DestinationEntry extends BaseSourceDestEntry {
 
 		public File makePathFromRelativePath(final String driveSNValue, final String relativePath) {
 			return new File(slotRootDir.getPath() + File.separator + driveSNValue + File.separator + relativePath);
+		}
+
+		public DestinationEntry getDestination() {
+			return referer;
+		}
+
+		public void updateWriteSpeed() {
+			if (copiedDurationsNanoSec.get() > 0) {
+				writeSpeed.set(Math.round((double) copiedDatasBytes.get() / (double) copiedDurationsNanoSec.get() * 1_000_000_000d));
+			} else {
+				writeSpeed.set(0);
+			}
+		}
+
+		public AtomicLong getCopiedDatasBytes() {
+			return copiedDatasBytes;
+		}
+
+		public AtomicLong getCopiedDurationsNanoSec() {
+			return copiedDurationsNanoSec;
+		}
+
+		@Override
+		public int hashCode() {
+			final int prime = 31;
+			int result = 1;
+			result = prime * result + getEnclosingInstance().hashCode();
+			result = prime * result + (slotRootDir == null ? 0 : slotRootDir.hashCode());
+			return result;
+		}
+
+		@Override
+		public boolean equals(final Object obj) {
+			if (this == obj) {
+				return true;
+			}
+			if (obj == null) {
+				return false;
+			}
+			if (!(obj instanceof Slot)) {
+				return false;
+			}
+			final Slot other = (Slot) obj;
+			if (!getEnclosingInstance().equals(other.getEnclosingInstance())) {
+				return false;
+			}
+			if (slotRootDir == null) {
+				if (other.slotRootDir != null) {
+					return false;
+				}
+			} else if (!slotRootDir.equals(other.slotRootDir)) {
+				return false;
+			}
+			return true;
+		}
+
+		private DestinationEntry getEnclosingInstance() {
+			return DestinationEntry.this;
 		}
 	}
 

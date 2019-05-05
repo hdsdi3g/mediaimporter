@@ -81,10 +81,10 @@ public class BaseSourceDestEntry {
 		if (obj == null) {
 			return false;
 		}
-		if (!(obj instanceof DestinationEntry)) {
+		if (!(obj instanceof BaseSourceDestEntry)) {
 			return false;
 		}
-		final DestinationEntry other = (DestinationEntry) obj;
+		final BaseSourceDestEntry other = (BaseSourceDestEntry) obj;
 		if (rootPath == null) {
 			if (other.rootPath != null) {
 				return false;

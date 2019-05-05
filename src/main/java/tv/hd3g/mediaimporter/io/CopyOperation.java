@@ -28,7 +28,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
@@ -45,17 +44,21 @@ public class CopyOperation implements Runnable {
 	private static final Set<OpenOption> OPEN_OPTIONS_READ_ONLY = Set.of(StandardOpenOption.READ);
 	private static final Set<OpenOption> OPEN_OPTIONS_READ_WRITE_NEW = Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
 
+	private final Path source;
 	private final FileEntry entryToCopy;
-	private final BiConsumer<CopyOperation, Integer> onProgress;
+	// private final BiConsumer<CopyOperation, Integer> onProgress;
+	// private final Consumer<OnWrite> onWrite;
 	private final List<Slot> destinationListToCopy;
 	private final ByteBuffer buffer;
 	private volatile boolean wantToStop;
+	// private final AtomicReference<ProgressStat> lastProgressStat;
+	private final CopyStat copyStat;
 
-	private final Path source;
-
-	public CopyOperation(final FileEntry entryToCopy, final BiConsumer<CopyOperation, Integer> onProgress) throws IOException {
+	CopyOperation(final FileEntry entryToCopy/*, final BiConsumer<CopyOperation, Integer> onProgress,, final Consumer<OnWrite> onWrite*/) throws IOException {
 		this.entryToCopy = entryToCopy;
-		this.onProgress = onProgress;
+		// onProgress = onProgress;
+		// this.onWrite = onWrite;
+
 		wantToStop = false;
 		source = entryToCopy.getFile().toPath();
 
@@ -64,13 +67,32 @@ public class CopyOperation implements Runnable {
 		 */
 		buffer = ByteBuffer.allocateDirect((int) Files.getFileStore(source).getBlockSize() * 256);
 		destinationListToCopy = entryToCopy.getToCopyDestinationSlotList();
+		// lastProgressStat = new AtomicReference<>(null);
+		copyStat = new CopyStat(this, entryToCopy.getFile().length());
 	}
+
+	List<Slot> getDestinationListToCopy() {
+		return destinationListToCopy;
+	}
+
+	/*class OnWrite {
+		final Slot slot;
+		final int writedBytes;
+		final long durationNanoSec;
+	
+		private OnWrite(final Slot slot, final int writedBytes, final long durationNanoSec) {
+			this.slot = slot;
+			this.writedBytes = writedBytes;
+			this.durationNanoSec = durationNanoSec;
+		}
+	}*/
 
 	@Override
 	public void run() {
 		if (destinationListToCopy.isEmpty()) {
 			return;
 		}
+		copyStat.onStart();
 
 		log.info("Start to copy " + entryToCopy + " (" + FileUtils.byteCountToDisplaySize(entryToCopy.getFile().length()) + ") to " + destinationListToCopy.size() + " destination(s)");
 
@@ -79,35 +101,45 @@ public class CopyOperation implements Runnable {
 			try {
 				FileUtils.forceMkdirParent(fileDestination);
 			} catch (final IOException e) {
+				copyStat.setLastException(e);
 				throw new RuntimeException("Can't prepare copy operation to " + fileDestination, e);
-				// TODO display in UI
 			}
 			return fileDestination.toPath();
 		}, slot -> slot));
 
-		final Map<FileChannel, Path> destinationChannels = new LinkedHashMap<>();
+		final Map<FileChannel, Slot> slotByFileChannel = new LinkedHashMap<>();
+		final Map<FileChannel, Path> pathByFileChannel = new LinkedHashMap<>();
+
 		try (final FileChannel sourceChannel = FileChannel.open(source, OPEN_OPTIONS_READ_ONLY)) {
 
-			for (final Path destinationPath : slotsToCopyByPath.keySet()) {
-				destinationChannels.put(FileChannel.open(destinationPath, OPEN_OPTIONS_READ_WRITE_NEW), destinationPath);
+			for (final Map.Entry<Path, Slot> entry : slotsToCopyByPath.entrySet()) {
+				final FileChannel destination = FileChannel.open(entry.getKey(), OPEN_OPTIONS_READ_WRITE_NEW);
+				slotByFileChannel.put(destination, entry.getValue());
+				pathByFileChannel.put(destination, entry.getKey());
 			}
 
+			long lastLoopDateNanoSec = System.nanoTime();
+			long timeBeforeWrite;
+			int sizeWrited;
 			while (sourceChannel.read(buffer) > 0) {
 				if (wantToStop == true) {
 					return;
 				}
 				buffer.flip();
-				onProgress.accept(this, buffer.remaining());
+				copyStat.onReadWriteLoop(buffer.remaining(), System.nanoTime() - lastLoopDateNanoSec);
 
-				for (final FileChannel destinationChannel : destinationChannels.keySet()) {
-					destinationChannel.write(buffer.asReadOnlyBuffer());
-					// TODO update DestEntry Perfs
-					// TODO update fileEntry status
+				for (final Map.Entry<FileChannel, Slot> entry : slotByFileChannel.entrySet()) {
+					timeBeforeWrite = System.nanoTime();
+					sizeWrited = entry.getKey().write(buffer.asReadOnlyBuffer());
+					copyStat.onWrite(entry.getValue(), sizeWrited, System.nanoTime() - timeBeforeWrite);
+
 					if (wantToStop == true) {
 						return;
 					}
 				}
+
 				buffer.clear();
+				lastLoopDateNanoSec = System.nanoTime();
 			}
 
 			Platform.runLater(() -> {
@@ -118,13 +150,15 @@ public class CopyOperation implements Runnable {
 				destinationChannel.force(true);
 			}*/
 		} catch (final IOException e) {
-			log.error("Can't open source file " + source, e); // TODO display in UI
+			log.error("Can't open source file " + source, e);
+			copyStat.setLastException(e);
 		} finally {
-			for (final FileChannel destinationChannel : destinationChannels.keySet()) {
+			for (final Map.Entry<FileChannel, Path> entry : pathByFileChannel.entrySet()) {
 				try {
-					destinationChannel.close();
+					entry.getKey().close();
 				} catch (final IOException e) {
-					log.warn("Can't close file " + destinationChannels.get(destinationChannel), e); // TODO display in UI
+					log.warn("Can't close file " + entry.getValue(), e);
+					copyStat.setLastException(e);
 				}
 			}
 		}
@@ -173,4 +207,11 @@ public class CopyOperation implements Runnable {
 		return true;
 	}
 
+	public FileEntry getFileEntry() {
+		return entryToCopy;
+	}
+
+	public CopyStat getCopyStat() {
+		return copyStat;
+	}
 }

@@ -28,6 +28,7 @@ import java.util.ResourceBundle;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,7 +49,6 @@ import javafx.scene.layout.BorderPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import tv.hd3g.mediaimporter.io.CopyFilesEngine;
-import tv.hd3g.mediaimporter.io.CopyFilesEngine.GlobalCopyProgress;
 import tv.hd3g.mediaimporter.tools.DriveProbe;
 import tv.hd3g.mediaimporter.tools.NavigateTo;
 import tv.hd3g.processlauncher.cmdline.ExecutableFinder;
@@ -215,8 +215,10 @@ public class MainApp extends Application {
 	private static void roundSizeValues(final Number value, final boolean empty, final Labeled label) {
 		if (empty) {
 			label.setText(null);
+		} else if (value.longValue() == 0l) {
+			label.setText(null);
 		} else {
-			label.setText(FileUtils.byteCountToDisplaySize(value.longValue()));
+			label.setText(FileUtils.byteCountToDisplaySize(value.longValue()));// TODO re-implements byteCountToDisplaySize
 		}
 	}
 
@@ -229,6 +231,12 @@ public class MainApp extends Application {
 		destsList.forEach(DestinationEntry::updateSlotsContent);
 
 		mainPanel.getTableDestinationsColAvailable().setCellFactory(col -> new TableCell<>() {
+			public void updateItem(final Number value, final boolean empty) {
+				super.updateItem(value, empty);
+				roundSizeValues(value, empty, this);
+			}
+		});
+		mainPanel.getTableDestinationsColSpeed().setCellFactory(col -> new TableCell<>() {
 			public void updateItem(final Number value, final boolean empty) {
 				super.updateItem(value, empty);
 				roundSizeValues(value, empty, this);
@@ -277,13 +285,13 @@ public class MainApp extends Application {
 	/*private class UpdateFileEntryStatusTask extends Task<Void> {
 		private final FileEntry fileEntry;
 		private final DestinationEntry destination;
-	
+
 		UpdateFileEntryStatusTask(final FileEntry fileEntry, final DestinationEntry destination) {
 			super();
 			this.fileEntry = fileEntry;
 			this.destination = destination;
 		}
-	
+
 		@Override
 		protected Void call() throws Exception {
 			// Auto-generated method stub
@@ -319,7 +327,7 @@ public class MainApp extends Application {
 	    }
 	  }
 	});
-	
+
 	new Thread(task).start();}	*/
 
 	private void initFileZone() {
@@ -438,12 +446,7 @@ public class MainApp extends Application {
 			mainPanel.getProgressBar().setProgress(-1);
 
 			try {
-				final CopyFilesEngine copyFilesEngine = new CopyFilesEngine(fileList, copyProgress -> {
-					Platform.runLater(() -> {
-						updateStateOnGlobalProgress(copyProgress);
-					});
-				});
-
+				final CopyFilesEngine copyFilesEngine = new CopyFilesEngine(fileList, destsList, this);
 				currentCopyEngine.set(copyFilesEngine);
 				copyFilesEngine.asyncStart().thenRunAsync(() -> {
 					Platform.runLater(() -> {
@@ -470,11 +473,16 @@ public class MainApp extends Application {
 		});
 	}
 
-	private void updateStateOnGlobalProgress(final GlobalCopyProgress globalProgress) {
-		mainPanel.getProgressBar().setProgress(globalProgress.getProgressRate());
-		mainPanel.getLblProgressionCounter().setText(globalProgress.getProgressionCounterText(messages.getString("labelProgressProcess")));
-		mainPanel.getLblEta().setText(globalProgress.getETA());
-		mainPanel.getLblSpeedCopy().setText(globalProgress.getSpeedCopy(messages.getString("labelProgressSpeed")));
+	public void updateProgress(final double progressRate, final int filesCopied, final int totalFiles, final long datasCopiedBytes, final long totalDatasBytes, final long etaMsec, final long meanCopySpeedBytesPerSec, final long instantCopySpeedBytesPerSec) {
+		mainPanel.getProgressBar().setProgress(progressRate);
+
+		final String counter = String.format(messages.getString("labelProgressProcess"), filesCopied + 1, totalFiles, FileUtils.byteCountToDisplaySize(datasCopiedBytes), FileUtils.byteCountToDisplaySize(totalDatasBytes));
+		mainPanel.getLblProgressionCounter().setText(counter);
+
+		mainPanel.getLblEta().setText("ETA: " + DurationFormatUtils.formatDuration(etaMsec, "HH:mm:ss"));
+
+		final String speedCopy = String.format(messages.getString("labelProgressSpeed"), FileUtils.byteCountToDisplaySize(Math.round(meanCopySpeedBytesPerSec)), FileUtils.byteCountToDisplaySize(Math.round(instantCopySpeedBytesPerSec)));
+		mainPanel.getLblSpeedCopy().setText(speedCopy);
 	}
 
 	private void resetStatesAfterCopyOperation() {

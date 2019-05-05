@@ -19,71 +19,71 @@ package tv.hd3g.mediaimporter.io;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import tv.hd3g.mediaimporter.DestinationEntry;
 import tv.hd3g.mediaimporter.FileEntry;
+import tv.hd3g.mediaimporter.MainApp;
 
 public class CopyFilesEngine {
 	private static Logger log = LogManager.getLogger();
 
 	private final List<CopyOperation> copyList;
+	final List<DestinationEntry> allDestinations;
 	private final ThreadPoolExecutor mainExecutor;
-	private final ThreadPoolExecutor progressExecutor;
+	// private final ThreadPoolExecutor progressExecutor;
 	private CompletableFuture<?> allTasks;
 
 	private final long dataSizeToCopyBytes;
-	private long startTimeMsec;
-	private volatile GlobalCopyProgress lastGlobalCopyProgress;
-	private final LinkedBlockingDeque<GlobalCopyProgress> lastCopyProgressSendedToDisplay;
-	private final Consumer<GlobalCopyProgress> onGlobalProgress;
+	private final GlobalCopyStat globalCopyStat;
+	// private volatile GlobalCopyProgress lastGlobalCopyProgress;
+	// private final LinkedBlockingDeque<GlobalCopyProgress> lastCopyProgressSendedToDisplay;
+	// private final LinkedBlockingDeque<FileCopyProgress> lastFileCopyProgressSendedToDisplay;
+	/*
+	 * Datas in bytes
+	 */
+	// private final Map<DestinationEntry, AtomicLong> copiedDatasByDestination;
+	/*
+	 * Durations in nanosec
+	 */
+	// private final Map<DestinationEntry, AtomicLong> copiedDurationsByDestination;
+
+	// private final Consumer<ProgressUpdate> onProgressUpdate;
 
 	/**
 	 * No reusable
 	 */
-	public CopyFilesEngine(final List<FileEntry> toCopy, final Consumer<GlobalCopyProgress> onGlobalProgress) {
-		this.onGlobalProgress = onGlobalProgress;
+	public CopyFilesEngine(final List<FileEntry> toCopy, final List<DestinationEntry> allDestinations, final MainApp ui /*, final Consumer<ProgressUpdate> onProgressUpdate*/) {
+		this.allDestinations = allDestinations;
+		// onProgressUpdate = onProgressUpdate;
 
-		progressExecutor = new ThreadPoolExecutor(1, 1, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
+		/*progressExecutor = new ThreadPoolExecutor(1, 1, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
 			final Thread t = new Thread(r);
 			t.setPriority(Thread.MIN_PRIORITY);
 			t.setDaemon(true);
 			t.setName("OnProgress");
 			return t;
-		});
-
-		lastCopyProgressSendedToDisplay = new LinkedBlockingDeque<>();
-		final BiConsumer<CopyOperation, Integer> onCopyProgress = (copyOperation, readSize) -> {
-			final long dateMsec = System.currentTimeMillis();
-			final long dateNanoSec = System.nanoTime();
-			progressExecutor.execute(() -> {
-				final GlobalCopyProgress copyProgress = new GlobalCopyProgress(readSize.longValue(), dateMsec, dateNanoSec, copyOperation);
-				lastCopyProgressSendedToDisplay.addLast(copyProgress);
-			});
-		};
+		});*/
 
 		copyList = toCopy.stream().map(fileEntry -> {
 			try {
-				return new CopyOperation(fileEntry, onCopyProgress);
+				return new CopyOperation(fileEntry/*, onWrite*/);
 			} catch (final IOException e) {
 				throw new RuntimeException("Can't prepare copy operation with " + fileEntry, e);
 			}
 		}).collect(Collectors.toUnmodifiableList());
+
+		globalCopyStat = new GlobalCopyStat(copyList.stream().map(CopyOperation::getCopyStat).collect(Collectors.toUnmodifiableList()), ui);
 
 		final AtomicLong counter = new AtomicLong();
 		mainExecutor = new ThreadPoolExecutor(1, 1, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(toCopy.size()), r -> {
@@ -119,7 +119,6 @@ public class CopyFilesEngine {
 	 */
 	public CompletableFuture<?> asyncStart() {
 		log.info("Put " + copyList.size() + " item(s) in queue for copy");
-		startTimeMsec = System.currentTimeMillis();
 
 		final CompletableFuture<?>[] allOperations = new CompletableFuture<?>[copyList.size()];
 
@@ -135,15 +134,10 @@ public class CopyFilesEngine {
 			t.setName("Display onProgress");
 			return t;
 		}).scheduleAtFixedRate(() -> {
-			final Optional<GlobalCopyProgress> last = Optional.ofNullable(lastCopyProgressSendedToDisplay.pollLast());
-			last.ifPresent(lastGlobalProgress -> {
-				onGlobalProgress.accept(lastGlobalProgress);
-				lastCopyProgressSendedToDisplay.clear();
-			});
+			globalCopyStat.refresh();
 		}, 300, 300, TimeUnit.MILLISECONDS);
 
 		allTasks.whenCompleteAsync((ok, error) -> regularUIUpdaterFuture.cancel(false));
-
 		return allTasks;
 	}
 
@@ -164,58 +158,6 @@ public class CopyFilesEngine {
 			copyOperation.switchStop();
 		});
 		CompletableFuture.runAsync(onDone, mainExecutor).thenAcceptAsync(v -> mainExecutor.shutdown());
-	}
-
-	public class GlobalCopyProgress {
-
-		private final int positionInList;
-		private final double instantSpeedBytesPerSec;
-		private final double meanSpeedBytesPerSec;
-		private final long positionBytes;
-		// private final long dateMsec;
-		private final long dateNanoSec;
-		private final long timeElapsedMsec;
-		private final long etaMsec;
-
-		private GlobalCopyProgress(final long dataSizeReadForLastLoopBytes, final long dateMsec, final long dateNanoSec, final CopyOperation currentOperation) {
-			positionInList = copyList.indexOf(currentOperation);
-
-			// this.dateMsec = dateMsec;
-			this.dateNanoSec = dateNanoSec;
-			timeElapsedMsec = dateMsec - startTimeMsec;
-
-			if (lastGlobalCopyProgress == null) {
-				positionBytes = dataSizeReadForLastLoopBytes;
-				instantSpeedBytesPerSec = (double) positionBytes / timeElapsedMsec * 1000d;
-			} else {
-				positionBytes = lastGlobalCopyProgress.positionBytes + dataSizeReadForLastLoopBytes;
-				instantSpeedBytesPerSec = Optional.ofNullable(lastCopyProgressSendedToDisplay.peekFirst()).map(first -> {
-					return (double) (positionBytes - first.positionBytes) / (double) (dateNanoSec - first.dateNanoSec) * 1_000_000_000d;
-				}).orElseGet(() -> {
-					return (double) (positionBytes - lastGlobalCopyProgress.positionBytes) / (double) (dateNanoSec - lastGlobalCopyProgress.dateNanoSec) * 1_000_000_000d;
-				});
-			}
-			meanSpeedBytesPerSec = (double) positionBytes / (double) timeElapsedMsec * 1000d;
-			lastGlobalCopyProgress = this;
-			etaMsec = Math.round((dataSizeToCopyBytes - positionBytes) / meanSpeedBytesPerSec * 1000d);
-		}
-
-		public double getProgressRate() {
-			return (double) positionBytes / (double) dataSizeToCopyBytes;
-		}
-
-		public String getProgressionCounterText(final String format) {
-			return String.format(format, positionInList + 1, copyList.size(), FileUtils.byteCountToDisplaySize(positionBytes), FileUtils.byteCountToDisplaySize(dataSizeToCopyBytes));
-		}
-
-		public String getETA() {
-			return "ETA: " + DurationFormatUtils.formatDuration(etaMsec, "HH:mm:ss");
-		}
-
-		public String getSpeedCopy(final String format) {
-			return String.format(format, FileUtils.byteCountToDisplaySize(Math.round(meanSpeedBytesPerSec)), FileUtils.byteCountToDisplaySize(Math.round(instantSpeedBytesPerSec)));
-		}
-
 	}
 
 }
