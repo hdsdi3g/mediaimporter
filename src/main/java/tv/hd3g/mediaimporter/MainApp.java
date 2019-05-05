@@ -18,6 +18,7 @@ package tv.hd3g.mediaimporter;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.LongSummaryStatistics;
@@ -27,7 +28,6 @@ import java.util.Optional;
 import java.util.ResourceBundle;
 import java.util.concurrent.CompletableFuture;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -218,7 +218,30 @@ public class MainApp extends Application {
 		} else if (value.longValue() == 0l) {
 			label.setText(null);
 		} else {
-			label.setText(FileUtils.byteCountToDisplaySize(value.longValue()));// TODO re-implements byteCountToDisplaySize
+			label.setText(byteCountToDisplaySizeWithPrecision(value.longValue()));
+		}
+	}
+
+	private static final DecimalFormat decimalFormat1digits = new DecimalFormat("###,###.#");
+	private static final DecimalFormat decimalFormat2digits = new DecimalFormat("###,###.##");
+
+	public static String byteCountToDisplaySizeWithPrecision(final long bytes) {
+		if (bytes == 0) {
+			return "0 Bytes";
+		}
+
+		final long k = 1024;
+		final String[] sizes = new String[] { "Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
+
+		final long i = Math.round(Math.floor(Math.log(bytes) / Math.log(k)));
+		final double value = bytes / Math.pow(k, i);
+
+		if (value > 100d) {
+			return String.valueOf(Math.round(value)) + " " + sizes[(int) i];
+		} else if (value > 10d) {
+			return decimalFormat1digits.format(value) + " " + sizes[(int) i];
+		} else {
+			return decimalFormat2digits.format(value) + " " + sizes[(int) i];
 		}
 	}
 
@@ -285,13 +308,13 @@ public class MainApp extends Application {
 	/*private class UpdateFileEntryStatusTask extends Task<Void> {
 		private final FileEntry fileEntry;
 		private final DestinationEntry destination;
-
+	
 		UpdateFileEntryStatusTask(final FileEntry fileEntry, final DestinationEntry destination) {
 			super();
 			this.fileEntry = fileEntry;
 			this.destination = destination;
 		}
-
+	
 		@Override
 		protected Void call() throws Exception {
 			// Auto-generated method stub
@@ -327,7 +350,7 @@ public class MainApp extends Application {
 	    }
 	  }
 	});
-
+	
 	new Thread(task).start();}	*/
 
 	private void initFileZone() {
@@ -376,6 +399,8 @@ public class MainApp extends Application {
 				return fileEntry.updateState();
 			});
 
+			// TODO display error box if some files are in error ! + after operation
+
 			sourcesList.forEach(entry -> {
 				try {
 					final SimpleStringProperty driveSN = new SimpleStringProperty();
@@ -400,7 +425,7 @@ public class MainApp extends Application {
 
 			final LongSummaryStatistics stats = fileList.stream().filter(FileEntry.needsToBeCopied).mapToLong(fileEntry -> fileEntry.getFile().length()).summaryStatistics();
 			if (stats.getCount() > 0) {
-				final String label = String.format(messages.getString("labelProgressReady"), stats.getCount(), FileUtils.byteCountToDisplaySize(stats.getSum()));
+				final String label = String.format(messages.getString("labelProgressReady"), stats.getCount(), MainApp.byteCountToDisplaySizeWithPrecision(stats.getSum()));
 				mainPanel.getLblProgressionCounter().setText(label);
 				mainPanel.getBtnStartCopy().setDisable(false);
 			}
@@ -476,12 +501,12 @@ public class MainApp extends Application {
 	public void updateProgress(final double progressRate, final int filesCopied, final int totalFiles, final long datasCopiedBytes, final long totalDatasBytes, final long etaMsec, final long meanCopySpeedBytesPerSec, final long instantCopySpeedBytesPerSec) {
 		mainPanel.getProgressBar().setProgress(progressRate);
 
-		final String counter = String.format(messages.getString("labelProgressProcess"), filesCopied + 1, totalFiles, FileUtils.byteCountToDisplaySize(datasCopiedBytes), FileUtils.byteCountToDisplaySize(totalDatasBytes));
+		final String counter = String.format(messages.getString("labelProgressProcess"), filesCopied + 1, totalFiles, MainApp.byteCountToDisplaySizeWithPrecision(datasCopiedBytes), MainApp.byteCountToDisplaySizeWithPrecision(totalDatasBytes));
 		mainPanel.getLblProgressionCounter().setText(counter);
 
 		mainPanel.getLblEta().setText("ETA: " + DurationFormatUtils.formatDuration(etaMsec, "HH:mm:ss"));
 
-		final String speedCopy = String.format(messages.getString("labelProgressSpeed"), FileUtils.byteCountToDisplaySize(Math.round(meanCopySpeedBytesPerSec)), FileUtils.byteCountToDisplaySize(Math.round(instantCopySpeedBytesPerSec)));
+		final String speedCopy = String.format(messages.getString("labelProgressSpeed"), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(meanCopySpeedBytesPerSec)), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(instantCopySpeedBytesPerSec)));
 		mainPanel.getLblSpeedCopy().setText(speedCopy);
 	}
 

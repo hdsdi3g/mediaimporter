@@ -26,7 +26,6 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 
 import javafx.beans.property.ReadOnlyLongWrapper;
@@ -157,8 +156,8 @@ public class FileEntry {
 			}
 			status.set("Error: " + e.getMessage());
 		}, () -> {
-			final String readed = FileUtils.byteCountToDisplaySize(readedBytes);
-			final String speed = FileUtils.byteCountToDisplaySize(meanSpeed);
+			final String readed = MainApp.byteCountToDisplaySizeWithPrecision(readedBytes);
+			final String speed = MainApp.byteCountToDisplaySizeWithPrecision(meanSpeed);
 			final String eta = DurationFormatUtils.formatDuration(currentEtaMsec, "HH:mm:ss");
 			status.set(String.format(MainApp.messages.getString("fileEntryStatusProgress"), readed, speed, eta));
 		});

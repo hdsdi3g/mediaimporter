@@ -112,7 +112,13 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		}
 
 		List<File> getCopiedListRootDirs() {
-			return Arrays.asList(slotRootDir.listFiles(validDirNonHidden));
+			final File[] files = slotRootDir.listFiles(validDirNonHidden);
+			for (int i = 0; i < files.length; i++) {
+				if (files[i] == null) {
+					throw new NullPointerException("listFiles return a null file entry on " + slotRootDir);
+				}
+			}
+			return Arrays.asList(files);
 		}
 
 		Optional<File> getCopyPresenceInSlotCopiedDirs(final String relativePath) {

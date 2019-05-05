@@ -41,39 +41,16 @@ public class CopyFilesEngine {
 	private final List<CopyOperation> copyList;
 	final List<DestinationEntry> allDestinations;
 	private final ThreadPoolExecutor mainExecutor;
-	// private final ThreadPoolExecutor progressExecutor;
 	private CompletableFuture<?> allTasks;
 
 	private final long dataSizeToCopyBytes;
 	private final GlobalCopyStat globalCopyStat;
-	// private volatile GlobalCopyProgress lastGlobalCopyProgress;
-	// private final LinkedBlockingDeque<GlobalCopyProgress> lastCopyProgressSendedToDisplay;
-	// private final LinkedBlockingDeque<FileCopyProgress> lastFileCopyProgressSendedToDisplay;
-	/*
-	 * Datas in bytes
-	 */
-	// private final Map<DestinationEntry, AtomicLong> copiedDatasByDestination;
-	/*
-	 * Durations in nanosec
-	 */
-	// private final Map<DestinationEntry, AtomicLong> copiedDurationsByDestination;
-
-	// private final Consumer<ProgressUpdate> onProgressUpdate;
 
 	/**
 	 * No reusable
 	 */
 	public CopyFilesEngine(final List<FileEntry> toCopy, final List<DestinationEntry> allDestinations, final MainApp ui /*, final Consumer<ProgressUpdate> onProgressUpdate*/) {
 		this.allDestinations = allDestinations;
-		// onProgressUpdate = onProgressUpdate;
-
-		/*progressExecutor = new ThreadPoolExecutor(1, 1, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
-			final Thread t = new Thread(r);
-			t.setPriority(Thread.MIN_PRIORITY);
-			t.setDaemon(true);
-			t.setName("OnProgress");
-			return t;
-		});*/
 
 		copyList = toCopy.stream().map(fileEntry -> {
 			try {

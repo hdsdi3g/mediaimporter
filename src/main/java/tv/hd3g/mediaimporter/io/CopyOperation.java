@@ -37,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import javafx.application.Platform;
 import tv.hd3g.mediaimporter.DestinationEntry.Slot;
 import tv.hd3g.mediaimporter.FileEntry;
+import tv.hd3g.mediaimporter.MainApp;
 
 public class CopyOperation implements Runnable {
 	private static Logger log = LogManager.getLogger();
@@ -46,19 +47,13 @@ public class CopyOperation implements Runnable {
 
 	private final Path source;
 	private final FileEntry entryToCopy;
-	// private final BiConsumer<CopyOperation, Integer> onProgress;
-	// private final Consumer<OnWrite> onWrite;
 	private final List<Slot> destinationListToCopy;
 	private final ByteBuffer buffer;
 	private volatile boolean wantToStop;
-	// private final AtomicReference<ProgressStat> lastProgressStat;
 	private final CopyStat copyStat;
 
-	CopyOperation(final FileEntry entryToCopy/*, final BiConsumer<CopyOperation, Integer> onProgress,, final Consumer<OnWrite> onWrite*/) throws IOException {
+	CopyOperation(final FileEntry entryToCopy) throws IOException {
 		this.entryToCopy = entryToCopy;
-		// onProgress = onProgress;
-		// this.onWrite = onWrite;
-
 		wantToStop = false;
 		source = entryToCopy.getFile().toPath();
 
@@ -67,25 +62,12 @@ public class CopyOperation implements Runnable {
 		 */
 		buffer = ByteBuffer.allocateDirect((int) Files.getFileStore(source).getBlockSize() * 256);
 		destinationListToCopy = entryToCopy.getToCopyDestinationSlotList();
-		// lastProgressStat = new AtomicReference<>(null);
 		copyStat = new CopyStat(this, entryToCopy.getFile().length());
 	}
 
 	List<Slot> getDestinationListToCopy() {
 		return destinationListToCopy;
 	}
-
-	/*class OnWrite {
-		final Slot slot;
-		final int writedBytes;
-		final long durationNanoSec;
-	
-		private OnWrite(final Slot slot, final int writedBytes, final long durationNanoSec) {
-			this.slot = slot;
-			this.writedBytes = writedBytes;
-			this.durationNanoSec = durationNanoSec;
-		}
-	}*/
 
 	@Override
 	public void run() {
@@ -94,7 +76,7 @@ public class CopyOperation implements Runnable {
 		}
 		copyStat.onStart();
 
-		log.info("Start to copy " + entryToCopy + " (" + FileUtils.byteCountToDisplaySize(entryToCopy.getFile().length()) + ") to " + destinationListToCopy.size() + " destination(s)");
+		log.info("Start to copy " + entryToCopy + " (" + MainApp.byteCountToDisplaySizeWithPrecision(entryToCopy.getFile().length()) + ") to " + destinationListToCopy.size() + " destination(s)");
 
 		final Map<Path, Slot> slotsToCopyByPath = destinationListToCopy.stream().collect(Collectors.toUnmodifiableMap(slot -> {
 			final File fileDestination = slot.makePathFromRelativePath(entryToCopy.getDriveSNValue(), entryToCopy.getRelativePath());
@@ -162,7 +144,11 @@ public class CopyOperation implements Runnable {
 				}
 			}
 		}
-		buffer.asReadOnlyBuffer();
+
+		final long lastModified = source.toFile().lastModified();
+		slotsToCopyByPath.keySet().stream().forEach(path -> {
+			path.toFile().setLastModified(lastModified);
+		});
 	}
 
 	public long getSourceLength() {
