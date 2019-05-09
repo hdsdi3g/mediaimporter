@@ -308,13 +308,13 @@ public class MainApp extends Application {
 	/*private class UpdateFileEntryStatusTask extends Task<Void> {
 		private final FileEntry fileEntry;
 		private final DestinationEntry destination;
-	
+
 		UpdateFileEntryStatusTask(final FileEntry fileEntry, final DestinationEntry destination) {
 			super();
 			this.fileEntry = fileEntry;
 			this.destination = destination;
 		}
-	
+
 		@Override
 		protected Void call() throws Exception {
 			// Auto-generated method stub
@@ -350,7 +350,7 @@ public class MainApp extends Application {
 	    }
 	  }
 	});
-	
+
 	new Thread(task).start();}	*/
 
 	private void initFileZone() {
@@ -399,7 +399,14 @@ public class MainApp extends Application {
 				return fileEntry.updateState();
 			});
 
-			// TODO display error box if some files are in error ! + after operation
+			// TODO display error box if some files are in error ! + after operation. info box if ok
+			// TODO Logs main + copy log
+			// TODO Prefix root dir
+			// TODO force mkdir with dates
+			// TODO title / icon
+
+			// TODO Better async pshell on start, with retry
+			// TODO Test media change
 
 			sourcesList.forEach(entry -> {
 				try {
