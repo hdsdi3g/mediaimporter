@@ -19,7 +19,7 @@ package tv.hd3g.mediaimporter.io;
 import java.io.IOException;
 import java.util.Optional;
 
-import tv.hd3g.mediaimporter.DestinationEntry.Slot;
+import tv.hd3g.mediaimporter.DestinationEntrySlot;
 import tv.hd3g.mediaimporter.FileEntry;
 
 public class CopyStat {
@@ -61,7 +61,7 @@ public class CopyStat {
 		startDateMsec = System.currentTimeMillis();
 	}
 
-	void onWrite(final Slot currentSlot, final long datasBytes, final long durationNanoSec) {
+	void onWrite(final DestinationEntrySlot currentSlot, final long datasBytes, final long durationNanoSec) {
 		currentSlot.getCopiedDatasBytes().addAndGet(datasBytes);
 		currentSlot.getCopiedDurationsNanoSec().addAndGet(durationNanoSec);
 	}

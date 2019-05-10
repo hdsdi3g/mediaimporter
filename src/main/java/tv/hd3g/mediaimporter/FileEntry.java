@@ -34,7 +34,6 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.util.Callback;
-import tv.hd3g.mediaimporter.DestinationEntry.Slot;
 
 public class FileEntry {
 
@@ -171,7 +170,7 @@ public class FileEntry {
 		}
 	};
 
-	public List<Slot> getToCopyDestinationSlotList() {
+	public List<DestinationEntrySlot> getToCopyDestinationSlotList() {
 		return destsList.stream().filter(destination -> {
 			return copiesByDestination.containsKey(destination) == false;
 		}).map(destination -> {

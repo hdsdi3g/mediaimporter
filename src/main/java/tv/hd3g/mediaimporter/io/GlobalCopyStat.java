@@ -23,12 +23,12 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import javafx.application.Platform;
-import tv.hd3g.mediaimporter.DestinationEntry.Slot;
+import tv.hd3g.mediaimporter.DestinationEntrySlot;
 import tv.hd3g.mediaimporter.MainApp;
 
 public class GlobalCopyStat {
 	private final List<CopyStat> items;
-	private final List<Slot> slotList;
+	private final List<DestinationEntrySlot> slotList;
 
 	private final MainApp ui;
 	private final int totalFiles;

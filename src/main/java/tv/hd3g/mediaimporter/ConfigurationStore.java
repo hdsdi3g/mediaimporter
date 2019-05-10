@@ -29,6 +29,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import org.apache.commons.io.FileUtils;
@@ -36,15 +40,18 @@ import org.apache.commons.io.IOUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
+import javafx.scene.control.TextField;
+import javafx.scene.input.KeyEvent;
 
 public class ConfigurationStore {
 	private static Logger log = LogManager.getLogger();
 
 	private final String url;
 
-	public ConfigurationStore(final String name, final ObservableList<SourceEntry> sourcesList, final ObservableList<DestinationEntry> destsList) {
+	public ConfigurationStore(final String name, final ObservableList<SourceEntry> sourcesList, final ObservableList<DestinationEntry> destsList, final TextField inputPrefixDirName) {
 		Objects.requireNonNull(sourcesList, "\"sourcesList\" can't to be null");
 		Objects.requireNonNull(destsList, "\"destsList\" can't to be null");
 
@@ -56,6 +63,7 @@ public class ConfigurationStore {
 		}
 
 		// sqliteFile.delete();
+		final Properties config;
 
 		url = "jdbc:sqlite:" + sqliteFile.getPath().replaceAll("\\\\", "/");
 		if (sqliteFile.exists() == false) {
@@ -72,11 +80,13 @@ public class ConfigurationStore {
 				log.debug("Init SQLite tables");
 				stmt.execute(IOUtils.toString(getClass().getResource("createdb-sources.sql").openStream(), Charset.defaultCharset()));
 				stmt.execute(IOUtils.toString(getClass().getResource("createdb-destinations.sql").openStream(), Charset.defaultCharset()));
+				stmt.execute(IOUtils.toString(getClass().getResource("createdb-config.sql").openStream(), Charset.defaultCharset()));
 			} catch (final SQLException e) {
 				throw new RuntimeException("Can't setup database", e);
 			} catch (final IOException e) {
 				throw new RuntimeException("Can't access to ressource", e);
 			}
+			config = new Properties();
 		} else {
 			try {
 				final Connection conn = DriverManager.getConnection(url);
@@ -99,23 +109,37 @@ public class ConfigurationStore {
 					}
 					destsList.add(new DestinationEntry(f));
 				}
+
+				final ResultSet rsConfig = stmt.executeQuery("SELECT key, value FROM config");
+				config = new Properties();
+				while (rsConfig.next()) {
+					config.put(rsDests.getString("key"), rsDests.getString("value"));
+				}
 			} catch (final SQLException e) {
 				throw new RuntimeException("Can't read from SQLite", e);
 			}
 		}
 
+		final ScheduledExecutorService delayedExecutor = Executors.newScheduledThreadPool(1);
+
 		sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
 			while (change.next()) {
 				change.getAddedSubList().forEach(entry -> {
-					prepareStatement("INSERT INTO sources(path) VALUES(?)", pstmt -> {
-						log.debug("INSERT sources " + entry.rootPath.getPath());
-						pstmt.setString(1, entry.rootPath.getPath());
+					final String path = entry.rootPath.getPath();
+					delayedExecutor.execute(() -> {
+						prepareStatement("INSERT INTO sources(path) VALUES(?)", pstmt -> {
+							log.debug("INSERT sources " + path);
+							pstmt.setString(1, path);
+						});
 					});
 				});
 				change.getRemoved().forEach(entry -> {
-					prepareStatement("DELETE FROM sources WHERE path = ?", pstmt -> {
-						log.debug("DELETE sources " + entry.rootPath.getPath());
-						pstmt.setString(1, entry.rootPath.getPath());
+					final String path = entry.rootPath.getPath();
+					delayedExecutor.execute(() -> {
+						prepareStatement("DELETE FROM sources WHERE path = ?", pstmt -> {
+							log.debug("DELETE sources " + path);
+							pstmt.setString(1, path);
+						});
 					});
 				});
 			}
@@ -123,19 +147,47 @@ public class ConfigurationStore {
 		destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
 			while (change.next()) {
 				change.getAddedSubList().forEach(entry -> {
-					prepareStatement("INSERT INTO destinations(path) VALUES(?)", pstmt -> {
-						log.debug("INSERT destinations " + entry.rootPath.getPath());
-						pstmt.setString(1, entry.rootPath.getPath());
+					final String path = entry.rootPath.getPath();
+					delayedExecutor.execute(() -> {
+						prepareStatement("INSERT INTO destinations(path) VALUES(?)", pstmt -> {
+							log.debug("INSERT destinations " + path);
+							pstmt.setString(1, path);
+						});
 					});
 				});
 				change.getRemoved().forEach(entry -> {
-					prepareStatement("DELETE FROM destinations WHERE path = ?", pstmt -> {
-						log.debug("DELETE destinations " + entry.rootPath.getPath());
-						pstmt.setString(1, entry.rootPath.getPath());
+					final String path = entry.rootPath.getPath();
+					delayedExecutor.execute(() -> {
+						prepareStatement("DELETE FROM destinations WHERE path = ?", pstmt -> {
+							log.debug("DELETE destinations " + path);
+							pstmt.setString(1, path);
+						});
 					});
 				});
 			}
 		});
+
+		inputPrefixDirName.setText(config.getProperty("inputPrefixDirName", ""));
+
+		inputPrefixDirName.addEventFilter(KeyEvent.KEY_RELEASED, event -> {
+			final String textOnEvent = inputPrefixDirName.getText().trim();
+			delayedExecutor.schedule(() -> {
+				Platform.runLater(() -> {
+					final String textAfterEvent = inputPrefixDirName.getText().trim();
+					if (textAfterEvent.equals(textOnEvent) == false) {
+						return;
+					}
+					delayedExecutor.execute(() -> {
+						prepareStatement("INSERT OR REPLACE INTO config(key, value) VALUES(?, ?)", pstmt -> {
+							log.debug("INSERT config inputPrefixDirName = " + textOnEvent);
+							pstmt.setString(1, "inputPrefixDirName");
+							pstmt.setString(2, textOnEvent);
+						});
+					});
+				});
+			}, 300, TimeUnit.MILLISECONDS);
+		});
+
 	}
 
 	private void prepareStatement(final String sql, final PreparedStatementConsumerWithSQLException withPstmt) {

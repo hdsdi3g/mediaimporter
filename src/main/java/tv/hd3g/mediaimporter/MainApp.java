@@ -71,7 +71,6 @@ public class MainApp extends Application {
 	private final DriveProbe driveProbe;
 	private final ToolRunner toolRunner;
 	private final SimpleObjectProperty<CopyFilesEngine> currentCopyEngine;
-	// private final ConfigurationStore configurationStore;
 
 	public MainApp() {
 		super();
@@ -80,7 +79,6 @@ public class MainApp extends Application {
 		fileList = FXCollections.observableList(new ArrayList<FileEntry>());
 		driveProbe = DriveProbe.get();
 		toolRunner = new ToolRunner(new ExecutableFinder(), 1);
-		/*configurationStore =*/ new ConfigurationStore("mediaimporter", sourcesList, destsList);
 		currentCopyEngine = new SimpleObjectProperty<>(null);
 		driveProbe.getSNByMountedDrive(toolRunner);
 	}
@@ -104,7 +102,10 @@ public class MainApp extends Application {
 		// stage.getIcons().add(new Image(getClass().getResourceAsStream("tasks.png")));
 		// image_tasks = new Image(getClass().getResourceAsStream("tasks.png"), 10, 10, false, false);
 
+		new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName());
+
 		primaryStage.setScene(scene);
+		primaryStage.setTitle("Media importer");
 		primaryStage.show();
 
 		primaryStage.setOnCloseRequest(event -> {
@@ -305,54 +306,6 @@ public class MainApp extends Application {
 		});
 	}
 
-	/*private class UpdateFileEntryStatusTask extends Task<Void> {
-		private final FileEntry fileEntry;
-		private final DestinationEntry destination;
-
-		UpdateFileEntryStatusTask(final FileEntry fileEntry, final DestinationEntry destination) {
-			super();
-			this.fileEntry = fileEntry;
-			this.destination = destination;
-		}
-
-		@Override
-		protected Void call() throws Exception {
-			// Auto-generated method stub
-			// destination.
-			return null;
-		}*/
-	/*final Task task = new Task<ObservableList<String>>() {
-	@Override
-	protected ObservableList<String> call() throws InterruptedException {
-		updateMessage("Finding friends . . .");
-		for (int i = 0; i < 10; i++) {
-			Thread.sleep(200);
-			updateProgress(i + 1, 10);
-		}
-		updateMessage("Finished.");
-		return FXCollections.observableArrayList("John", "Jim", "Geoff", "Jill", "Suki");
-	}
-	// @Override protected void done() {
-	// super.done();
-	// System.out.println("This is bad, do not do this, this thread " + Thread.currentThread() + " is not the FXApplication thread.");
-	// runButton.setText("Voila!");
-	// }
-	};
-	statusLabel.textProperty().bind(task.messageProperty());
-	runButton.disableProperty().bind(task.runningProperty());
-	peopleView.itemsProperty().bind(task.valueProperty());
-	progressBar.progressProperty().bind(task.progressProperty());
-	task.stateProperty().addListener(new ChangeListener<Worker.State>() {
-	  @Override public void changed(ObservableValue<? extends Worker.State> observableValue, Worker.State oldState, Worker.State newState) {
-	    if (newState == Worker.State.SUCCEEDED) {
-	      System.out.println("This is ok, this thread " + Thread.currentThread() + " is the JavaFX Application thread.");
-	      runButton.setText("Voila!");
-	    }
-	  }
-	});
-
-	new Thread(task).start();}	*/
-
 	private void initFileZone() {
 		mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
 
@@ -400,10 +353,7 @@ public class MainApp extends Application {
 			});
 
 			// TODO display error box if some files are in error ! + after operation. info box if ok
-			// TODO Logs main + copy log
-			// TODO Prefix root dir
-			// TODO force mkdir with dates
-			// TODO title / icon
+			// TODO icon
 
 			// TODO Better async pshell on start, with retry
 			// TODO Test media change
@@ -458,12 +408,7 @@ public class MainApp extends Application {
 			}
 
 			destsList.forEach(dest -> {
-				try {
-					dest.prepareNewSessionSlot();
-				} catch (final IOException e) {
-					MainApp.log4javaFx.error("Can't create session slot: please check destinations writing rights", e);
-					throw new RuntimeException("Can't create session slot", e);
-				}
+				dest.prepareNewSessionSlot(mainPanel.getInputPrefixDirName().getText());
 			});
 
 			log.info("Prepare and start copy operation");
@@ -473,6 +418,7 @@ public class MainApp extends Application {
 			mainPanel.getBtnAddDestinationDir().setDisable(true);
 			mainPanel.getBtnRemoveDestinationDir().setDisable(true);
 			mainPanel.getBtnAddSourceToScan().setDisable(true);
+			mainPanel.getInputPrefixDirName().setDisable(true);
 			mainPanel.getBtnStartCopy().setDisable(true);
 			mainPanel.getBtnStopCopy().setDisable(false);
 			mainPanel.getProgressBar().setProgress(-1);
@@ -524,6 +470,7 @@ public class MainApp extends Application {
 		mainPanel.getBtnAddDestinationDir().setDisable(false);
 		mainPanel.getBtnRemoveDestinationDir().setDisable(false);
 		mainPanel.getBtnAddSourceToScan().setDisable(false);
+		mainPanel.getInputPrefixDirName().setDisable(false);
 		mainPanel.getBtnStartCopy().setDisable(false);
 		mainPanel.getBtnStopCopy().setDisable(true);
 

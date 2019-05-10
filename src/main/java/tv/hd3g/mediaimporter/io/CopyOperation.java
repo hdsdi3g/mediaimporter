@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +36,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javafx.application.Platform;
-import tv.hd3g.mediaimporter.DestinationEntry.Slot;
+import tv.hd3g.mediaimporter.DestinationEntrySlot;
 import tv.hd3g.mediaimporter.FileEntry;
 import tv.hd3g.mediaimporter.MainApp;
 
@@ -47,7 +48,7 @@ public class CopyOperation implements Runnable {
 
 	private final Path source;
 	private final FileEntry entryToCopy;
-	private final List<Slot> destinationListToCopy;
+	private final List<DestinationEntrySlot> destinationListToCopy;
 	private final ByteBuffer buffer;
 	private volatile boolean wantToStop;
 	private final CopyStat copyStat;
@@ -65,7 +66,7 @@ public class CopyOperation implements Runnable {
 		copyStat = new CopyStat(this, entryToCopy.getFile().length());
 	}
 
-	List<Slot> getDestinationListToCopy() {
+	List<DestinationEntrySlot> getDestinationListToCopy() {
 		return destinationListToCopy;
 	}
 
@@ -78,23 +79,49 @@ public class CopyOperation implements Runnable {
 
 		log.info("Start to copy " + entryToCopy + " (" + MainApp.byteCountToDisplaySizeWithPrecision(entryToCopy.getFile().length()) + ") to " + destinationListToCopy.size() + " destination(s)");
 
-		final Map<Path, Slot> slotsToCopyByPath = destinationListToCopy.stream().collect(Collectors.toUnmodifiableMap(slot -> {
-			final File fileDestination = slot.makePathFromRelativePath(entryToCopy.getDriveSNValue(), entryToCopy.getRelativePath());
+		final Map<Path, DestinationEntrySlot> slotsToCopyByPath = destinationListToCopy.stream().collect(Collectors.toUnmodifiableMap(slot -> {
+			final String relativePath = entryToCopy.getRelativePath();
+			final File fileDestination = slot.makePathFromRelativePath(entryToCopy.getDriveSNValue(), relativePath);
+
 			try {
-				FileUtils.forceMkdirParent(fileDestination);
+				final String sourceFullPath = entryToCopy.getFile().getAbsolutePath();
+				final String sourceBasePath = sourceFullPath.substring(0, sourceFullPath.length() - relativePath.length());
+				log.trace("Prepare to create dir struct from {} to {}", sourceBasePath, relativePath);
+
+				final Iterator<Path> relativePathIterator = Path.of(relativePath).iterator();
+				File currentSourcePath = new File(sourceBasePath);
+				File currentDestPath = slot.makePathFromRelativePath(entryToCopy.getDriveSNValue(), "");
+				FileUtils.forceMkdir(currentDestPath);
+
+				while (relativePathIterator.hasNext()) {
+					final String pathPart = relativePathIterator.next().toFile().getPath();
+					currentSourcePath = new File(currentSourcePath.getPath() + File.separator + pathPart);
+					if (currentSourcePath.isDirectory() == false) {
+						break;
+					}
+					currentDestPath = new File(currentDestPath.getPath() + File.separator + pathPart);
+					if (currentDestPath.exists() && currentDestPath.isDirectory()) {
+						break;
+					}
+					log.trace("Create dir and set source date from {} to {}", currentSourcePath, currentDestPath);
+					FileUtils.forceMkdir(currentDestPath);
+					currentDestPath.setLastModified(currentSourcePath.lastModified());
+				}
+
+				return fileDestination.toPath();
 			} catch (final IOException e) {
 				copyStat.setLastException(e);
 				throw new RuntimeException("Can't prepare copy operation to " + fileDestination, e);
 			}
-			return fileDestination.toPath();
 		}, slot -> slot));
 
-		final Map<FileChannel, Slot> slotByFileChannel = new LinkedHashMap<>();
+		final Map<FileChannel, DestinationEntrySlot> slotByFileChannel = new LinkedHashMap<>();
 		final Map<FileChannel, Path> pathByFileChannel = new LinkedHashMap<>();
 
 		try (final FileChannel sourceChannel = FileChannel.open(source, OPEN_OPTIONS_READ_ONLY)) {
+			for (final Map.Entry<Path, DestinationEntrySlot> entry : slotsToCopyByPath.entrySet()) {
+				entry.getValue().addLogHistoryOnStartsCopy(source.toFile(), entry.getKey().toFile());
 
-			for (final Map.Entry<Path, Slot> entry : slotsToCopyByPath.entrySet()) {
 				final FileChannel destination = FileChannel.open(entry.getKey(), OPEN_OPTIONS_READ_WRITE_NEW);
 				slotByFileChannel.put(destination, entry.getValue());
 				pathByFileChannel.put(destination, entry.getKey());
@@ -110,11 +137,10 @@ public class CopyOperation implements Runnable {
 				buffer.flip();
 				copyStat.onReadWriteLoop(buffer.remaining(), System.nanoTime() - lastLoopDateNanoSec);
 
-				for (final Map.Entry<FileChannel, Slot> entry : slotByFileChannel.entrySet()) {
+				for (final Map.Entry<FileChannel, DestinationEntrySlot> entry : slotByFileChannel.entrySet()) {
 					timeBeforeWrite = System.nanoTime();
 					sizeWrited = entry.getKey().write(buffer.asReadOnlyBuffer());
 					copyStat.onWrite(entry.getValue(), sizeWrited, System.nanoTime() - timeBeforeWrite);
-
 					if (wantToStop == true) {
 						return;
 					}
@@ -128,12 +154,18 @@ public class CopyOperation implements Runnable {
 				entryToCopy.updateState();
 			});
 
+			for (final Map.Entry<FileChannel, DestinationEntrySlot> entry : slotByFileChannel.entrySet()) {
+				entry.getValue().addLogHistoryOnEndCopy(pathByFileChannel.get(entry.getKey()).toFile());
+			}
+
 			/*for (final FileChannel destinationChannel : destinationChannels.keySet()) {
 				destinationChannel.force(true);
 			}*/
 		} catch (final IOException e) {
 			log.error("Can't open source file " + source, e);
 			copyStat.setLastException(e);
+		} catch (final Throwable e) {
+			log.warn("Generic error for " + source, e);
 		} finally {
 			for (final Map.Entry<FileChannel, Path> entry : pathByFileChannel.entrySet()) {
 				try {

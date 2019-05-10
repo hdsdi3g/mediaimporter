@@ -24,6 +24,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 
 public class MainPanel {
 
@@ -64,6 +65,8 @@ public class MainPanel {
 	private Button btnAddSourceToScan;
 	@FXML
 	private Button btnClearScanlist;
+	@FXML
+	private TextField inputPrefixDirName;
 	@FXML
 	private TableView<FileEntry> tableFiles;
 	@FXML
@@ -149,6 +152,10 @@ public class MainPanel {
 
 	public Button getBtnClearScanlist() {
 		return btnClearScanlist;
+	}
+
+	public TextField getInputPrefixDirName() {
+		return inputPrefixDirName;
 	}
 
 	public TableView<FileEntry> getTableFiles() {
