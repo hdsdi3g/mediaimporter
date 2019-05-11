@@ -30,11 +30,15 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
 import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.util.Callback;
+import tv.hd3g.mediaimporter.tools.FileSanity;
 
 public class SourceEntry extends BaseSourceDestEntry {
 
-	public SourceEntry(final File rootPath) {
+	private final FileSanity fileSanity;
+
+	public SourceEntry(final File rootPath, final FileSanity fileSanity) {
 		super(rootPath);
+		this.fileSanity = fileSanity;
 	}
 
 	public static Callback<CellDataFeatures<SourceEntry, File>, ObservableValue<File>> getColPathFactory() {
@@ -67,7 +71,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 			} else if (actualFileSet.contains(founded)) {
 				return false;
 			}
-			return true;
+			return fileSanity.isFileIsValid(founded);
 		}).sorted().peek(founded -> actualFileSet.add(founded)).map(founded -> {
 			final FileEntry newFileEntry = new FileEntry(this, founded, driveSN, destsList);
 			fileList.add(newFileEntry);

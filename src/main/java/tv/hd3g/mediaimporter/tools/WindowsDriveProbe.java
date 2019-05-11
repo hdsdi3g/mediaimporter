@@ -113,7 +113,7 @@ public class WindowsDriveProbe implements DriveProbe {
 
 		@Override
 		public void beforeRun(final ProcesslauncherBuilder processBuilder) {
-			processBuilder.setExecutionTimeLimiter(5, TimeUnit.SECONDS, scheduledExecutor);
+			processBuilder.setExecutionTimeLimiter(4, TimeUnit.SECONDS, scheduledExecutor);
 		}
 	}
 
@@ -133,7 +133,7 @@ public class WindowsDriveProbe implements DriveProbe {
 
 		@Override
 		public void beforeRun(final ProcesslauncherBuilder processBuilder) {
-			processBuilder.setExecutionTimeLimiter(5, TimeUnit.SECONDS, scheduledExecutor);
+			processBuilder.setExecutionTimeLimiter(4, TimeUnit.SECONDS, scheduledExecutor);
 		}
 
 	}

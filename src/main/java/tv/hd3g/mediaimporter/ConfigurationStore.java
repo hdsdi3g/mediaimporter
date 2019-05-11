@@ -45,15 +45,18 @@ import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyEvent;
+import tv.hd3g.mediaimporter.tools.FileSanity;
 
 public class ConfigurationStore {
 	private static Logger log = LogManager.getLogger();
 
 	private final String url;
+	private final FileSanity fileSanity;
 
-	public ConfigurationStore(final String name, final ObservableList<SourceEntry> sourcesList, final ObservableList<DestinationEntry> destsList, final TextField inputPrefixDirName) {
+	public ConfigurationStore(final String name, final ObservableList<SourceEntry> sourcesList, final ObservableList<DestinationEntry> destsList, final TextField inputPrefixDirName, final FileSanity fileSanity) {
 		Objects.requireNonNull(sourcesList, "\"sourcesList\" can't to be null");
 		Objects.requireNonNull(destsList, "\"destsList\" can't to be null");
+		this.fileSanity = Objects.requireNonNull(fileSanity, "\"fileSanity\" can't to be null");
 
 		final File sqliteFile = Path.of(Optional.ofNullable(System.getenv("LOCALAPPDATA")).orElse(System.getProperty("user.home") + File.separator + ".config"), name, "settings.sqlite").toFile();
 		try {
@@ -98,7 +101,7 @@ public class ConfigurationStore {
 					if (f.exists() == false) {
 						continue;
 					}
-					sourcesList.add(new SourceEntry(f));
+					sourcesList.add(new SourceEntry(f, fileSanity));
 				}
 
 				final ResultSet rsDests = stmt.executeQuery("SELECT path FROM destinations");

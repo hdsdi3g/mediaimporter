@@ -45,6 +45,7 @@ public class FileEntry {
 	private final String relativePath;
 	private final List<DestinationEntry> destsList;
 	private IOException lastCopyError;
+	private FileEntryStatus currentResumeStatus;
 
 	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
@@ -52,8 +53,20 @@ public class FileEntry {
 		this.driveSN = Objects.requireNonNull(driveSN, "\"driveSN\" can't to be null");
 		status = new SimpleStringProperty();
 		copiesByDestination = new HashMap<>();
-		relativePath = file.getAbsolutePath().substring(source.rootPath.getAbsolutePath().length() + 1);
+
+		if (source.rootPath.getParentFile() == null) {
+			/**
+			 * File from root dir
+			 */
+			relativePath = file.getAbsolutePath().substring(source.rootPath.getAbsolutePath().length());
+		} else {
+			/**
+			 * File from sub dir
+			 */
+			relativePath = file.getAbsolutePath().substring(source.rootPath.getAbsolutePath().length() + 1);
+		}
 		this.destsList = destsList;
+		currentResumeStatus = FileEntryStatus.NOT_STARTED;
 	}
 
 	public void addDestination(final DestinationEntry destination) {
@@ -128,24 +141,34 @@ public class FileEntry {
 	private void updateStatus() {
 		if (lastCopyError != null) {
 			status.set("Error: " + lastCopyError.getMessage());
+			currentResumeStatus = FileEntryStatus.ERROR_OR_INCOMPLETE;
 		} else if (copiesByDestination.isEmpty()) {
 			status.setValue(MainApp.messages.getString("fileEntryStatusNew"));
+			currentResumeStatus = FileEntryStatus.NOT_STARTED;
 		} else {
 			final boolean isNotOnError = copiesByDestination.values().stream().allMatch(isSameSize);
 			if (copiesByDestination.size() == destsList.size()) {
 				if (isNotOnError) {
 					status.setValue(String.format(MainApp.messages.getString("fileEntryStatusDone"), copiesByDestination.size()));
+					currentResumeStatus = FileEntryStatus.ALL_COPIES_DONE;
 				} else {
 					final long inError = copiesByDestination.values().stream().filter(isSameSize.negate()).count();
 					status.setValue(String.format(MainApp.messages.getString("fileEntryStatusWithError"), inError, copiesByDestination.size()));
+					currentResumeStatus = FileEntryStatus.ERROR_OR_INCOMPLETE;
 				}
 			} else if (isNotOnError) {
 				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartial"), copiesByDestination.size(), destsList.size()));
+				currentResumeStatus = FileEntryStatus.PARTIAL_DONE;
 			} else {
 				final long inError = copiesByDestination.values().stream().filter(isSameSize.negate()).count();
 				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartialWithError"), inError, copiesByDestination.size(), destsList.size()));
+				currentResumeStatus = FileEntryStatus.ERROR_OR_INCOMPLETE;
 			}
 		}
+	}
+
+	public FileEntryStatus getCurrentResumeStatus() {
+		return currentResumeStatus;
 	}
 
 	public void updateCopyProgression(final long currentEtaMsec, final long meanSpeed, final long readedBytes, final Optional<IOException> lastError) {
@@ -154,6 +177,7 @@ public class FileEntry {
 				lastCopyError = e;
 			}
 			status.set("Error: " + e.getMessage());
+			currentResumeStatus = FileEntryStatus.ERROR_OR_INCOMPLETE;
 		}, () -> {
 			final String readed = MainApp.byteCountToDisplaySizeWithPrecision(readedBytes);
 			final String speed = MainApp.byteCountToDisplaySizeWithPrecision(meanSpeed);

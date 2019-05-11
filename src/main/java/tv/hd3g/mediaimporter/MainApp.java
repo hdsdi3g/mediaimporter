@@ -20,13 +20,22 @@ import java.io.File;
 import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ResourceBundle;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.logging.log4j.LogManager;
@@ -41,15 +50,19 @@ import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Labeled;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableRow;
+import javafx.scene.image.Image;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import tv.hd3g.mediaimporter.io.CopyFilesEngine;
 import tv.hd3g.mediaimporter.tools.DriveProbe;
+import tv.hd3g.mediaimporter.tools.FileSanity;
 import tv.hd3g.mediaimporter.tools.NavigateTo;
 import tv.hd3g.processlauncher.cmdline.ExecutableFinder;
 import tv.hd3g.processlauncher.tool.ToolRunner;
@@ -71,6 +84,11 @@ public class MainApp extends Application {
 	private final DriveProbe driveProbe;
 	private final ToolRunner toolRunner;
 	private final SimpleObjectProperty<CopyFilesEngine> currentCopyEngine;
+	private final FileSanity fileSanity;
+
+	private final SimpleObjectProperty<Map<File, String>> lastSNDrivesProbeResult;
+	private final ScheduledExecutorService driveSNUpdaterRegularExecutor;
+	private ScheduledFuture<?> driveSNUpdaterRegularFuture;
 
 	public MainApp() {
 		super();
@@ -78,60 +96,91 @@ public class MainApp extends Application {
 		destsList = FXCollections.observableList(new ArrayList<DestinationEntry>());
 		fileList = FXCollections.observableList(new ArrayList<FileEntry>());
 		driveProbe = DriveProbe.get();
+		fileSanity = FileSanity.get();
 		toolRunner = new ToolRunner(new ExecutableFinder(), 1);
 		currentCopyEngine = new SimpleObjectProperty<>(null);
-		driveProbe.getSNByMountedDrive(toolRunner);
+		lastSNDrivesProbeResult = new SimpleObjectProperty<>();
+		driveSNUpdaterRegularExecutor = Executors.newScheduledThreadPool(1);
+		driveSNUpdaterRegularFuture = null;
+		updateSNDrives();
+	}
+
+	private void updateSNDrives() {
+		if (driveSNUpdaterRegularFuture != null) {
+			if (driveSNUpdaterRegularFuture.isCancelled() == false && driveSNUpdaterRegularFuture.isDone() == false) {
+				return;
+			}
+		}
+
+		driveSNUpdaterRegularFuture = driveSNUpdaterRegularExecutor.scheduleAtFixedRate(() -> {
+			try {
+				final Map<File, String> probeResult = driveProbe.getSNByMountedDrive(toolRunner).get(5000, TimeUnit.MILLISECONDS);
+				driveSNUpdaterRegularFuture.cancel(false);
+				Platform.runLater(() -> {
+					lastSNDrivesProbeResult.set(probeResult);
+				});
+			} catch (InterruptedException | ExecutionException | TimeoutException e) {
+				log.warn("Can't get drives S/N, but it will be a retry", e);
+			}
+		}, 500, 6000, TimeUnit.MILLISECONDS);
 	}
 
 	private MainPanel mainPanel;
 	private Stage stage;
+	private Image appIcon;
 
 	@Override
-	public void start(final Stage primaryStage) throws Exception {
-		log.info("Start JavaFX GUI Interface");
-
-		final FXMLLoader d = new FXMLLoader();
-
-		d.setResources(Objects.requireNonNull(messages, "\"messages\" can't to be null"));
-		final BorderPane root = (BorderPane) d.load(getClass().getResource(MainPanel.class.getSimpleName() + ".fxml").openStream());
-
-		mainPanel = d.getController();
-
-		final Scene scene = new Scene(root);
-		scene.getStylesheets().add(getClass().getResource(MainPanel.class.getSimpleName() + ".css").toExternalForm());
-		// stage.getIcons().add(new Image(getClass().getResourceAsStream("tasks.png")));
-		// image_tasks = new Image(getClass().getResourceAsStream("tasks.png"), 10, 10, false, false);
-
-		new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName());
-
-		primaryStage.setScene(scene);
-		primaryStage.setTitle("Media importer");
-		primaryStage.show();
-
-		primaryStage.setOnCloseRequest(event -> {
-			event.consume();
-			if (currentCopyEngine.isNotNull().get()) {
-				currentCopyEngine.get().asyncStop(() -> {
-				});
-			}
-			primaryStage.close();
-		});
-		mainPanel.getBtnQuit().setOnAction(event -> {
-			event.consume();
-			log.debug("Want to close");
-			if (currentCopyEngine.isNotNull().get()) {
-				currentCopyEngine.get().asyncStop(() -> {
-				});
-			}
-			primaryStage.close();
-		});
+	public void start(final Stage primaryStage) {
 		stage = primaryStage;
+		log.info("Start JavaFX GUI Interface");
+		try {
 
-		initSourceZone();
-		initDestZone();
-		initFileZone();
-		initActionZone();
-		initTablesRowFactory();
+			final FXMLLoader d = new FXMLLoader();
+
+			d.setResources(Objects.requireNonNull(messages, "\"messages\" can't to be null"));
+			final BorderPane root = (BorderPane) d.load(getClass().getResource(MainPanel.class.getSimpleName() + ".fxml").openStream());
+
+			mainPanel = d.getController();
+
+			final Scene scene = new Scene(root);
+			scene.getStylesheets().add(getClass().getResource(MainPanel.class.getSimpleName() + ".css").toExternalForm());
+			appIcon = new Image(getClass().getResourceAsStream("memory-card.png"));
+			stage.getIcons().add(appIcon);
+			// image_tasks = new Image(getClass().getResourceAsStream("tasks.png"), 10, 10, false, false);
+
+			new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity);
+
+			stage.setScene(scene);
+			stage.setTitle("Media importer");
+			stage.show();
+
+			stage.setOnCloseRequest(event -> {
+				event.consume();
+				if (currentCopyEngine.isNotNull().get()) {
+					currentCopyEngine.get().asyncStop(() -> {
+					});
+				}
+				stage.close();
+			});
+			mainPanel.getBtnQuit().setOnAction(event -> {
+				event.consume();
+				log.debug("Want to close");
+				if (currentCopyEngine.isNotNull().get()) {
+					currentCopyEngine.get().asyncStop(() -> {
+					});
+				}
+				stage.close();
+			});
+
+			initSourceZone();
+			initDestZone();
+			initFileZone();
+			initActionZone();
+			initTablesRowFactory();
+		} catch (final Exception e) {
+			log.error("Error during loading app", e);
+			System.exit(1);
+		}
 	}
 
 	private void initTablesRowFactory() {
@@ -185,7 +234,7 @@ public class MainApp extends Application {
 		mainPanel.getBtnAddSourceDir().setOnAction(event -> {
 			event.consume();
 			selectDirectory("addSourceDirectory").ifPresent(file -> {
-				final SourceEntry toAdd = new SourceEntry(file);
+				final SourceEntry toAdd = new SourceEntry(file, fileSanity);
 				if (sourcesList.contains(toAdd) == false) {
 					log.info("Add new source directory: " + file);
 					sourcesList.add(toAdd);
@@ -306,6 +355,8 @@ public class MainApp extends Application {
 		});
 	}
 
+	private static final BiFunction<Map<File, String>, SourceEntry, String> driveSNFromProbeResult = (probeResult, entry) -> probeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), messages.getString("driveSNDefault"));
+
 	private void initFileZone() {
 		mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
 
@@ -346,25 +397,27 @@ public class MainApp extends Application {
 			log.info("Start scan source dirs");
 			mainPanel.getBtnClearScanlist().setDisable(true);
 
-			final CompletableFuture<Map<File, String>> cfLastProbeResult = driveProbe.getSNByMountedDrive(toolRunner);
+			updateSNDrives();
 
 			fileList.removeIf(fileEntry -> {
 				return fileEntry.updateState();
 			});
 
-			// TODO display error box if some files are in error ! + after operation. info box if ok
-			// TODO icon
-
-			// TODO Better async pshell on start, with retry
+			// TODO create popup menu to browse on file list and dest target(s) https://stackoverflow.com/questions/766956/how-do-i-create-a-right-click-context-menu-in-java-swing
 			// TODO Test media change
 
 			sourcesList.forEach(entry -> {
-				try {
-					final SimpleStringProperty driveSN = new SimpleStringProperty();
+				final SimpleStringProperty driveSN = new SimpleStringProperty();
+				if (lastSNDrivesProbeResult.isNotNull().get()) {
+					driveSN.set(driveSNFromProbeResult.apply(lastSNDrivesProbeResult.get(), entry));
+				} else {
+					driveSN.set(driveSNFromProbeResult.apply(Collections.emptyMap(), entry));
+				}
+				lastSNDrivesProbeResult.addListener((observable, oldValue, newValue) -> {
+					driveSN.set(driveSNFromProbeResult.apply(newValue, entry));
+				});
 
-					cfLastProbeResult.thenAccept(lastProbeResult -> {
-						driveSN.set(lastProbeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), messages.getString("driveSNDefault")));
-					});
+				try {
 					final List<FileEntry> newFilesEntries = entry.scanSource(fileList, driveSN, destsList);
 
 					if (newFilesEntries.isEmpty() == false) {
@@ -388,6 +441,8 @@ public class MainApp extends Application {
 			}
 
 			mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
+
+			displayStatusMsgBox();
 		});
 		mainPanel.getBtnClearScanlist().setOnAction(event -> {
 			event.consume();
@@ -428,12 +483,12 @@ public class MainApp extends Application {
 				currentCopyEngine.set(copyFilesEngine);
 				copyFilesEngine.asyncStart().thenRunAsync(() -> {
 					Platform.runLater(() -> {
-						resetStatesAfterCopyOperation();
+						afterCopyOperation();
 					});
 				});
 			} catch (final Exception e) {
 				log4javaFx.error("Can't process copy operation", e);
-				resetStatesAfterCopyOperation();
+				afterCopyOperation();
 			}
 		});
 		mainPanel.getBtnStopCopy().setOnAction(event -> {
@@ -445,7 +500,7 @@ public class MainApp extends Application {
 
 			currentCopyEngine.get().asyncStop(() -> {
 				Platform.runLater(() -> {
-					resetStatesAfterCopyOperation();
+					afterCopyOperation();
 				});
 			});
 		});
@@ -463,7 +518,7 @@ public class MainApp extends Application {
 		mainPanel.getLblSpeedCopy().setText(speedCopy);
 	}
 
-	private void resetStatesAfterCopyOperation() {
+	private void afterCopyOperation() {
 		currentCopyEngine.setValue(null);
 		mainPanel.getBtnAddSourceDir().setDisable(false);
 		mainPanel.getBtnRemoveSourceDir().setDisable(false);
@@ -477,6 +532,80 @@ public class MainApp extends Application {
 		mainPanel.getProgressBar().setProgress(0);
 		mainPanel.getLblEta().setText("");
 		mainPanel.getLblSpeedCopy().setText("");
+
+		fileList.stream().forEach(f -> {
+			f.updateState();
+		});
+		displayStatusMsgBox();
+	}
+
+	private void displayStatusMsgBox() {
+		final Map<FileEntryStatus, Integer> countByStatuses = FileEntryStatus.countByStatuses(fileList);
+		final Map<FileEntryStatus, Long> sizeByStatuses = FileEntryStatus.sizeByStatuses(fileList);
+
+		final AlertType alertType;
+		if (countByStatuses.get(FileEntryStatus.ERROR_OR_INCOMPLETE).intValue() > 0) {
+			alertType = AlertType.ERROR;
+		} else if (countByStatuses.get(FileEntryStatus.PARTIAL_DONE).intValue() > 0) {
+			alertType = AlertType.WARNING;
+		} else {
+			alertType = AlertType.INFORMATION;
+		}
+
+		final String header;
+		if (countByStatuses.get(FileEntryStatus.ERROR_OR_INCOMPLETE).intValue() > 0) {
+			header = messages.getString("statusMsgboxHeader_ERROR_OR_INCOMPLETE");
+		} else if (countByStatuses.get(FileEntryStatus.PARTIAL_DONE).intValue() > 0) {
+			header = messages.getString("statusMsgboxHeader_PARTIAL_DONE");
+		} else if (countByStatuses.get(FileEntryStatus.NOT_STARTED).intValue() > 0) {
+			header = messages.getString("statusMsgboxHeader_NOT_STARTED");
+		} else {
+			header = messages.getString("statusMsgboxHeader_ALL_COPIES_DONE");
+		}
+
+		final Alert alert = new Alert(alertType);
+		alert.setTitle(messages.getString("statusMsgboxTitle"));
+		alert.setHeaderText(header);
+
+		alert.setContentText(Arrays.stream(FileEntryStatus.values()).filter(status -> {
+			return countByStatuses.get(status).intValue() > 0;
+		}).map(status -> {
+			final int count = countByStatuses.get(status).intValue();
+			final String size = byteCountToDisplaySizeWithPrecision(sizeByStatuses.get(status).longValue());
+			return String.format(messages.getString("statusMsgboxContent_" + status.name()), count, size);
+		}).collect(Collectors.joining(System.lineSeparator())));
+
+		// fileList.get(0).getFile()
+
+		/*final GridPane expContent = new GridPane();
+		expContent.setMaxWidth(Double.MAX_VALUE);
+		int i = 0;
+		
+		expContent.add(new Label("‹" + event.getThreadName() + "›"), 0, i++);
+		expContent.add(new Label(" ‣ " + event.getSource().toString()), 0, i++);
+		
+		final Throwable error = event.getThrown();
+		if (error != null) {
+			final StringWriter sw = new StringWriter();
+			final PrintWriter pw = new PrintWriter(sw);
+			error.printStackTrace(pw);
+		
+			final TextArea textArea = new TextArea(sw.toString());
+			textArea.setEditable(false);
+			textArea.setWrapText(true);
+		
+			textArea.setMaxWidth(Double.MAX_VALUE);
+			textArea.setMaxHeight(Double.MAX_VALUE);
+			GridPane.setVgrow(textArea, Priority.ALWAYS);
+			GridPane.setHgrow(textArea, Priority.ALWAYS);
+			expContent.add(new Label(messages.getString("alertDisplayStacktrace")), 0, i++);
+			expContent.add(textArea, 0, i++);
+		}
+		alert.getDialogPane().setExpandableContent(expContent);
+		*/
+
+		((Stage) alert.getDialogPane().getScene().getWindow()).getIcons().add(appIcon);
+		alert.showAndWait();
 	}
 
 }
