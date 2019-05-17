@@ -25,6 +25,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
 
@@ -35,7 +36,7 @@ import javafx.beans.value.ObservableValue;
 import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.util.Callback;
 
-public class FileEntry {
+public class FileEntry implements TargetedFileEntries {
 
 	private final SourceEntry source;
 	private final File file;
@@ -273,6 +274,20 @@ public class FileEntry {
 		return param -> {
 			return param.getValue().status;
 		};
+	}
+
+	@Override
+	public List<Entry> getTargetedFileEntries() {
+		final String messageDest = MainApp.messages.getString("tableContextDestFile");
+
+		final Stream<Entry> sourceEntry = Stream.of(new Entry(MainApp.messages.getString("tableContextSourceFile"), file));
+
+		final Stream<Entry> destEntries = destsList.stream().filter(copiesByDestination::containsKey).map(dest -> {
+			final CopyFileReference ref = copiesByDestination.get(dest);
+			return new Entry(String.format(messageDest, dest.rootPath.getPath()), ref.copy, ref.sameSize == false);
+		});
+
+		return Stream.concat(sourceEntry, destEntries).collect(Collectors.toUnmodifiableList());
 	}
 
 }

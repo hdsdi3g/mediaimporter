@@ -18,6 +18,8 @@ package tv.hd3g.mediaimporter;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -26,7 +28,7 @@ import org.apache.commons.io.FileUtils;
 
 import javafx.collections.ObservableList;
 
-public class BaseSourceDestEntry {
+public class BaseSourceDestEntry implements TargetedFileEntries {
 	protected final File rootPath;
 
 	public BaseSourceDestEntry(final File rootPath) {
@@ -58,6 +60,11 @@ public class BaseSourceDestEntry {
 				return item.rootPath.equals(s);
 			});
 		});
+	}
+
+	@Override
+	public List<Entry> getTargetedFileEntries() {
+		return Arrays.asList(new Entry(MainApp.messages.getString("tableContextMenuDir"), rootPath));
 	}
 
 	@Override

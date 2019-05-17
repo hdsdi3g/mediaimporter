@@ -83,6 +83,7 @@ public class MainApp extends Application {
 	private final ObservableList<FileEntry> fileList;
 	private final DriveProbe driveProbe;
 	private final ToolRunner toolRunner;
+	private final NavigateTo navigateTo;
 	private final SimpleObjectProperty<CopyFilesEngine> currentCopyEngine;
 	private final FileSanity fileSanity;
 
@@ -97,7 +98,8 @@ public class MainApp extends Application {
 		fileList = FXCollections.observableList(new ArrayList<FileEntry>());
 		driveProbe = DriveProbe.get();
 		fileSanity = FileSanity.get();
-		toolRunner = new ToolRunner(new ExecutableFinder(), 1);
+		navigateTo = NavigateTo.get();
+		toolRunner = new ToolRunner(new ExecutableFinder(), 2);
 		currentCopyEngine = new SimpleObjectProperty<>(null);
 		lastSNDrivesProbeResult = new SimpleObjectProperty<>();
 		driveSNUpdaterRegularExecutor = Executors.newScheduledThreadPool(1);
@@ -177,6 +179,7 @@ public class MainApp extends Application {
 			initFileZone();
 			initActionZone();
 			initTablesRowFactory();
+			initTablesContextMenu();
 		} catch (final Exception e) {
 			log.error("Error during loading app", e);
 			System.exit(1);
@@ -188,7 +191,7 @@ public class MainApp extends Application {
 			final TableRow<SourceEntry> row = new TableRow<>();
 			row.setOnMouseClicked(mouseEvent -> {
 				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-					NavigateTo.get().navigateTo(row.getItem().rootPath, toolRunner);
+					navigateTo.navigateTo(row.getItem().rootPath, toolRunner);
 				}
 			});
 			return row;
@@ -198,7 +201,7 @@ public class MainApp extends Application {
 			final TableRow<DestinationEntry> row = new TableRow<>();
 			row.setOnMouseClicked(mouseEvent -> {
 				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-					NavigateTo.get().navigateTo(row.getItem().rootPath, toolRunner);
+					navigateTo.navigateTo(row.getItem().rootPath, toolRunner);
 				}
 			});
 			return row;
@@ -208,11 +211,17 @@ public class MainApp extends Application {
 			final TableRow<FileEntry> row = new TableRow<>();
 			row.setOnMouseClicked(mouseEvent -> {
 				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-					NavigateTo.get().navigateTo(row.getItem().getFile(), toolRunner);
+					navigateTo.navigateTo(row.getItem().getFile(), toolRunner);
 				}
 			});
 			return row;
 		});
+	}
+
+	private void initTablesContextMenu() {
+		new TableContextMenu(mainPanel.getTableSources(), navigateTo, toolRunner);
+		new TableContextMenu(mainPanel.getTableDestinations(), navigateTo, toolRunner);
+		new TableContextMenu(mainPanel.getTableFiles(), navigateTo, toolRunner);
 	}
 
 	@Override
@@ -403,8 +412,8 @@ public class MainApp extends Application {
 				return fileEntry.updateState();
 			});
 
-			// TODO create popup menu to browse on file list and dest target(s) https://stackoverflow.com/questions/766956/how-do-i-create-a-right-click-context-menu-in-java-swing
 			// TODO Test media change
+			// TODO resolve sony problem (found diff s/n on card, and use if for create dirs)
 
 			sourcesList.forEach(entry -> {
 				final SimpleStringProperty driveSN = new SimpleStringProperty();
@@ -580,20 +589,20 @@ public class MainApp extends Application {
 		/*final GridPane expContent = new GridPane();
 		expContent.setMaxWidth(Double.MAX_VALUE);
 		int i = 0;
-		
+
 		expContent.add(new Label("‹" + event.getThreadName() + "›"), 0, i++);
 		expContent.add(new Label(" ‣ " + event.getSource().toString()), 0, i++);
-		
+
 		final Throwable error = event.getThrown();
 		if (error != null) {
 			final StringWriter sw = new StringWriter();
 			final PrintWriter pw = new PrintWriter(sw);
 			error.printStackTrace(pw);
-		
+
 			final TextArea textArea = new TextArea(sw.toString());
 			textArea.setEditable(false);
 			textArea.setWrapText(true);
-		
+
 			textArea.setMaxWidth(Double.MAX_VALUE);
 			textArea.setMaxHeight(Double.MAX_VALUE);
 			GridPane.setVgrow(textArea, Priority.ALWAYS);
