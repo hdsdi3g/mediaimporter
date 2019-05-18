@@ -36,6 +36,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
@@ -82,7 +83,6 @@ public class MainApp extends Application {
 	private final ObservableList<SourceEntry> sourcesList;
 	private final ObservableList<DestinationEntry> destsList;
 	private final ObservableList<FileEntry> fileList;
-	private final DriveProbe driveProbe;
 	private final ToolRunner toolRunner;
 	private final NavigateTo navigateTo;
 	private final SimpleObjectProperty<CopyFilesEngine> currentCopyEngine;
@@ -98,7 +98,6 @@ public class MainApp extends Application {
 		sourcesList = FXCollections.observableList(new ArrayList<SourceEntry>());
 		destsList = FXCollections.observableList(new ArrayList<DestinationEntry>());
 		fileList = FXCollections.observableList(new ArrayList<FileEntry>());
-		driveProbe = DriveProbe.get();
 		fileSanity = FileSanity.get();
 		navigateTo = NavigateTo.get();
 		digestByFile = new ConcurrentHashMap<>();
@@ -119,7 +118,8 @@ public class MainApp extends Application {
 
 		driveSNUpdaterRegularFuture = driveSNUpdaterRegularExecutor.scheduleAtFixedRate(() -> {
 			try {
-				final Map<File, String> probeResult = driveProbe.getSNByMountedDrive(toolRunner).get(5000, TimeUnit.MILLISECONDS);
+				final Map<File, String> probeResult = DriveProbe.get().getSNByMountedDrive(toolRunner).get(DriveProbe.timeLimitSec + 1, TimeUnit.SECONDS);
+				log.info("Found S/N for drives: {}", probeResult.toString());
 				driveSNUpdaterRegularFuture.cancel(false);
 				Platform.runLater(() -> {
 					lastSNDrivesProbeResult.set(probeResult);
@@ -127,7 +127,7 @@ public class MainApp extends Application {
 			} catch (InterruptedException | ExecutionException | TimeoutException e) {
 				log.warn("Can't get drives S/N, but it will be a retry", e);
 			}
-		}, 500, 6000, TimeUnit.MILLISECONDS);
+		}, 0, DriveProbe.timeLimitSec / 2, TimeUnit.SECONDS);
 	}
 
 	private MainPanel mainPanel;
@@ -370,21 +370,28 @@ public class MainApp extends Application {
 	private static final BiFunction<Map<File, String>, SourceEntry, String> driveSNFromProbeResult = (probeResult, entry) -> probeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), messages.getString("driveSNDefault"));
 
 	private void initFileZone() {
-		mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
+		final Supplier<Boolean> isBtnAddSourceToScanDisabled = () -> {
+			return sourcesList.isEmpty() | destsList.isEmpty() | lastSNDrivesProbeResult.isNull().get();
+		};
+
+		mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
 
 		sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
 			while (change.next()) {
 				if (change.wasRemoved() | change.wasAdded()) {
-					mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
+					mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
 				}
 			}
 		});
 		destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
 			while (change.next()) {
 				if (change.wasRemoved() | change.wasAdded()) {
-					mainPanel.getBtnAddSourceToScan().setDisable(sourcesList.isEmpty() | destsList.isEmpty());
+					mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
 				}
 			}
+		});
+		lastSNDrivesProbeResult.addListener((observable, oldValue, newValue) -> {
+			mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
 		});
 
 		mainPanel.getTableFiles().setItems(fileList);
@@ -418,7 +425,6 @@ public class MainApp extends Application {
 			digestByFile.clear();
 
 			// TODO Test media change
-			// TODO block scan else driveSN is ok and ++time driveSN
 
 			sourcesList.forEach(entry -> {
 				final SimpleStringProperty driveSN = new SimpleStringProperty();

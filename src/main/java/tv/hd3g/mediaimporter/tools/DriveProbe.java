@@ -26,6 +26,8 @@ import tv.hd3g.processlauncher.tool.ToolRunner;
 
 public interface DriveProbe {
 
+	long timeLimitSec = 6;
+
 	CompletableFuture<Map<File, String>> getSNByMountedDrive(ToolRunner runner);
 
 	static DriveProbe get() {
