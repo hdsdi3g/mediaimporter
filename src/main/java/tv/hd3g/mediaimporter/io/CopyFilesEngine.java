@@ -89,13 +89,6 @@ public class CopyFilesEngine {
 				throw new RuntimeException("Can't prepare copy operation with " + fileStore, e);
 			}
 		});
-
-		/*copyList.stream().forEach(copyItem -> {
-			final FileEntry entry = copyItem.getFileEntry();
-			copyItem.getDestinationListToCopy().stream().map(DestinationEntrySlot::getStore).forEach(store -> {
-				store.add(entry.getRelativePath(), entry.getDriveSNValue(), entry.getFile());
-			});
-		});*/
 	}
 
 	/**

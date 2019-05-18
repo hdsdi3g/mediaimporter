@@ -39,32 +39,15 @@ public class DestinationEntrySlot {
 
 	private final File slotRootDir;
 	private final DestinationEntry referer;
-	// private final SourceListStore store;
 
 	DestinationEntrySlot(final DestinationEntry referer, final File dir) {
 		this.referer = referer;
 		slotRootDir = Objects.requireNonNull(dir, "\"slotRootDir\" can't to be null");
-		// store = new SourceListStore(slotRootDir);
 	}
-
-	/*public SourceListStore getStore() {
-		return store;
-	}*/
 
 	File getDir() {
 		return slotRootDir;
 	}
-
-	/*File getCopyPresenceInSlotCopiedDirs(final String relativePath, final String driveSNValue) {
-		final File[] files = slotRootDir.listFiles(DestinationEntry.validDirNonHidden);
-		if (files == null) {
-			log.warn("listFiles is null ? " + slotRootDir.getPath());
-			return Optional.empty();
-		}
-		return Arrays.stream(files).filter(file -> file != null).map(copiedRootDir -> {
-			return new File(copiedRootDir.getPath() + File.separator + relativePath);
-		}).filter(File::exists).findFirst();
-	}*/
 
 	public File makePathFromRelativePath(final String driveSNValue, final String relativePath) {
 		return new File(slotRootDir.getPath() + File.separator + driveSNValue + File.separator + relativePath);
