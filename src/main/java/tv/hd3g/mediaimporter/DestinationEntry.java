@@ -22,9 +22,11 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -44,6 +46,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 	private final SimpleLongProperty writeSpeed;
 	private final AtomicLong copiedDatasBytes;
 	private final AtomicLong copiedDurationsNanoSec;
+	private final ConcurrentHashMap<File, Long> digestByFile;
 
 	private final ObservableList<DestinationEntrySlot> slots;
 	private DestinationEntrySlot currentSessionSlot;
@@ -55,12 +58,17 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		slots = FXCollections.observableList(new ArrayList<>());
 		copiedDatasBytes = new AtomicLong(0);
 		copiedDurationsNanoSec = new AtomicLong(0);
+		digestByFile = new ConcurrentHashMap<>();
 	}
 
 	static final FilenameFilter validDirNonHidden = (dir, name) -> {
 		final File file = new File(dir.getPath() + File.separator + name);
 		return file.isDirectory() & file.isHidden() == false & file.getName().startsWith(".") == false;
 	};
+
+	Map<File, Long> getDigestByFile() {
+		return digestByFile;
+	}
 
 	public AtomicLong getCopiedDatasBytes() {
 		return copiedDatasBytes;
@@ -91,8 +99,10 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		slots.sort((l, r) -> Long.compare(l.getDir().lastModified(), r.getDir().lastModified()));
 	}
 
-	public Optional<File> searchCopyPresence(final String relativePath) {
-		return slots.stream().map(slot -> slot.getCopyPresenceInSlotCopiedDirs(relativePath)).filter(Optional::isPresent).map(Optional::get).findFirst();
+	public List<File> searchCopyPresence(final String relativePath, final String driveSN) {
+		return slots.stream().map(slot -> {
+			return slot.makePathFromRelativePath(driveSN, relativePath);
+		}).filter(File::exists).collect(Collectors.toUnmodifiableList());
 	}
 
 	public DestinationEntry prepareNewSessionSlot(final String prefixDirName) {

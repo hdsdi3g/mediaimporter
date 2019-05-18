@@ -44,7 +44,8 @@ public class CopyOperation implements Runnable {
 	private static Logger log = LogManager.getLogger();
 
 	private static final Set<OpenOption> OPEN_OPTIONS_READ_ONLY = Set.of(StandardOpenOption.READ);
-	private static final Set<OpenOption> OPEN_OPTIONS_READ_WRITE_NEW = Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
+	private static final Set<OpenOption> OPEN_OPTIONS_WRITE_NEW = Set.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
+	private static final String suffixCopyFileName = "-oncopy";
 
 	private final Path source;
 	private final FileEntry entryToCopy;
@@ -76,7 +77,6 @@ public class CopyOperation implements Runnable {
 			return;
 		}
 		copyStat.onStart();
-
 		log.info("Start to copy " + entryToCopy + " (" + MainApp.byteCountToDisplaySizeWithPrecision(entryToCopy.getFile().length()) + ") to " + destinationListToCopy.size() + " destination(s)");
 
 		final Map<Path, DestinationEntrySlot> slotsToCopyByPath = destinationListToCopy.stream().collect(Collectors.toUnmodifiableMap(slot -> {
@@ -122,7 +122,10 @@ public class CopyOperation implements Runnable {
 			for (final Map.Entry<Path, DestinationEntrySlot> entry : slotsToCopyByPath.entrySet()) {
 				entry.getValue().addLogHistoryOnStartsCopy(source.toFile(), entry.getKey().toFile());
 
-				final FileChannel destination = FileChannel.open(entry.getKey(), OPEN_OPTIONS_READ_WRITE_NEW);
+				final File tempFile = new File(entry.getKey().toFile().getPath() + suffixCopyFileName);
+				FileUtils.forceMkdir(tempFile.getParentFile());
+
+				final FileChannel destination = FileChannel.open(tempFile.toPath(), OPEN_OPTIONS_WRITE_NEW);
 				slotByFileChannel.put(destination, entry.getValue());
 				pathByFileChannel.put(destination, entry.getKey());
 			}
@@ -150,19 +153,11 @@ public class CopyOperation implements Runnable {
 				lastLoopDateNanoSec = System.nanoTime();
 			}
 
-			Platform.runLater(() -> {
-				entryToCopy.updateState();
-			});
-
-			for (final Map.Entry<FileChannel, DestinationEntrySlot> entry : slotByFileChannel.entrySet()) {
-				entry.getValue().addLogHistoryOnEndCopy(pathByFileChannel.get(entry.getKey()).toFile());
-			}
-
 			/*for (final FileChannel destinationChannel : destinationChannels.keySet()) {
 				destinationChannel.force(true);
 			}*/
 		} catch (final IOException e) {
-			log.error("Can't open source file " + source, e);
+			log.error("Can't process copy with " + source, e);
 			copyStat.setLastException(e);
 		} catch (final Throwable e) {
 			log.warn("Generic error for " + source, e);
@@ -170,12 +165,24 @@ public class CopyOperation implements Runnable {
 			for (final Map.Entry<FileChannel, Path> entry : pathByFileChannel.entrySet()) {
 				try {
 					entry.getKey().close();
+
+					final File expectedFile = pathByFileChannel.get(entry.getKey()).toFile();
+					final File realCopiedFile = new File(expectedFile.getPath() + suffixCopyFileName);
+					FileUtils.moveFile(realCopiedFile, expectedFile);
 				} catch (final IOException e) {
-					log.warn("Can't close file " + entry.getValue(), e);
+					log.warn("Can't close file " + entry.getValue() + suffixCopyFileName, e);
 					copyStat.setLastException(e);
 				}
 			}
 		}
+
+		for (final Map.Entry<FileChannel, DestinationEntrySlot> entry : slotByFileChannel.entrySet()) {
+			entry.getValue().addLogHistoryOnEndCopy(pathByFileChannel.get(entry.getKey()).toFile());
+		}
+
+		Platform.runLater(() -> {
+			entryToCopy.updateState();
+		});
 
 		final long lastModified = source.toFile().lastModified();
 		slotsToCopyByPath.keySet().stream().forEach(path -> {

@@ -24,12 +24,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Date;
-import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -43,35 +39,32 @@ public class DestinationEntrySlot {
 
 	private final File slotRootDir;
 	private final DestinationEntry referer;
+	// private final SourceListStore store;
 
 	DestinationEntrySlot(final DestinationEntry referer, final File dir) {
 		this.referer = referer;
 		slotRootDir = Objects.requireNonNull(dir, "\"slotRootDir\" can't to be null");
+		// store = new SourceListStore(slotRootDir);
 	}
+
+	/*public SourceListStore getStore() {
+		return store;
+	}*/
 
 	File getDir() {
 		return slotRootDir;
 	}
 
-	List<File> getCopiedListRootDirs() {
+	/*File getCopyPresenceInSlotCopiedDirs(final String relativePath, final String driveSNValue) {
 		final File[] files = slotRootDir.listFiles(DestinationEntry.validDirNonHidden);
 		if (files == null) {
 			log.warn("listFiles is null ? " + slotRootDir.getPath());
-			Collections.emptyList();
+			return Optional.empty();
 		}
-		for (int i = 0; i < files.length; i++) {
-			if (files[i] == null) {
-				throw new NullPointerException("listFiles return a null file entry on " + slotRootDir);
-			}
-		}
-		return Arrays.asList(files);
-	}
-
-	Optional<File> getCopyPresenceInSlotCopiedDirs(final String relativePath) {
-		return getCopiedListRootDirs().stream().map(copiedRootDir -> {
+		return Arrays.stream(files).filter(file -> file != null).map(copiedRootDir -> {
 			return new File(copiedRootDir.getPath() + File.separator + relativePath);
 		}).filter(File::exists).findFirst();
-	}
+	}*/
 
 	public File makePathFromRelativePath(final String driveSNValue, final String relativePath) {
 		return new File(slotRootDir.getPath() + File.separator + driveSNValue + File.separator + relativePath);

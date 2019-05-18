@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -35,10 +37,13 @@ import tv.hd3g.mediaimporter.tools.FileSanity;
 public class SourceEntry extends BaseSourceDestEntry {
 
 	private final FileSanity fileSanity;
+	private final Map<File, Long> digestByFile;
 
-	public SourceEntry(final File rootPath, final FileSanity fileSanity) {
+	public SourceEntry(final File rootPath, final FileSanity fileSanity, final Map<File, Long> digestByFile) {
 		super(rootPath);
 		this.fileSanity = fileSanity;
+		this.digestByFile = Objects.requireNonNull(digestByFile, "\"digestByFile\" can't to be null");
+
 	}
 
 	public static Callback<CellDataFeatures<SourceEntry, File>, ObservableValue<File>> getColPathFactory() {
@@ -73,7 +78,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 			}
 			return fileSanity.isFileIsValid(founded);
 		}).sorted().peek(founded -> actualFileSet.add(founded)).map(founded -> {
-			final FileEntry newFileEntry = new FileEntry(this, founded, driveSN, destsList);
+			final FileEntry newFileEntry = new FileEntry(this, founded, driveSN, destsList, digestByFile);
 			fileList.add(newFileEntry);
 			return newFileEntry;
 		}).collect(Collectors.toUnmodifiableList());

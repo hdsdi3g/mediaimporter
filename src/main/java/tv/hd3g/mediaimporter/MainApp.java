@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -86,6 +87,7 @@ public class MainApp extends Application {
 	private final NavigateTo navigateTo;
 	private final SimpleObjectProperty<CopyFilesEngine> currentCopyEngine;
 	private final FileSanity fileSanity;
+	private final ConcurrentHashMap<File, Long> digestByFile;
 
 	private final SimpleObjectProperty<Map<File, String>> lastSNDrivesProbeResult;
 	private final ScheduledExecutorService driveSNUpdaterRegularExecutor;
@@ -99,6 +101,7 @@ public class MainApp extends Application {
 		driveProbe = DriveProbe.get();
 		fileSanity = FileSanity.get();
 		navigateTo = NavigateTo.get();
+		digestByFile = new ConcurrentHashMap<>();
 		toolRunner = new ToolRunner(new ExecutableFinder(), 2);
 		currentCopyEngine = new SimpleObjectProperty<>(null);
 		lastSNDrivesProbeResult = new SimpleObjectProperty<>();
@@ -150,7 +153,7 @@ public class MainApp extends Application {
 			stage.getIcons().add(appIcon);
 			// image_tasks = new Image(getClass().getResourceAsStream("tasks.png"), 10, 10, false, false);
 
-			new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity);
+			new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity, digestByFile);
 
 			stage.setScene(scene);
 			stage.setTitle("Media importer");
@@ -243,7 +246,7 @@ public class MainApp extends Application {
 		mainPanel.getBtnAddSourceDir().setOnAction(event -> {
 			event.consume();
 			selectDirectory("addSourceDirectory").ifPresent(file -> {
-				final SourceEntry toAdd = new SourceEntry(file, fileSanity);
+				final SourceEntry toAdd = new SourceEntry(file, fileSanity, digestByFile);
 				if (sourcesList.contains(toAdd) == false) {
 					log.info("Add new source directory: " + file);
 					sourcesList.add(toAdd);
@@ -412,8 +415,10 @@ public class MainApp extends Application {
 				return fileEntry.updateState();
 			});
 
+			digestByFile.clear();
+
 			// TODO Test media change
-			// TODO resolve sony problem (found diff s/n on card, and use if for create dirs)
+			// TODO block scan else driveSN is ok and ++time driveSN
 
 			sourcesList.forEach(entry -> {
 				final SimpleStringProperty driveSN = new SimpleStringProperty();

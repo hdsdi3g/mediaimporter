@@ -53,7 +53,7 @@ public class WindowsDriveProbe implements DriveProbe {
 			}).collect(Collectors.toMap(line -> {
 				return line.get(0).split("\\\\")[2].toLowerCase();
 			}, line -> {
-				return line.get(1).replaceAll("\\.", "");
+				return line.get(1).replaceAll("\\.", "").replaceAll(":", "");
 			}));
 
 			final List<String> partitions = partitionsRunner.checkExecutionGetText().getStdoutLines(false).collect(Collectors.toUnmodifiableList());

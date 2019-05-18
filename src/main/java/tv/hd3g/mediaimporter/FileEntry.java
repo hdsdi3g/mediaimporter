@@ -27,6 +27,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 
 import javafx.beans.property.ReadOnlyLongWrapper;
@@ -38,6 +39,8 @@ import javafx.util.Callback;
 
 public class FileEntry implements TargetedFileEntries {
 
+	private static final long maxFileSizeDigestCompute = 30_000;
+
 	private final SourceEntry source;
 	private final File file;
 	private final SimpleStringProperty status;
@@ -45,13 +48,17 @@ public class FileEntry implements TargetedFileEntries {
 	private final Map<DestinationEntry, CopyFileReference> copiesByDestination;
 	private final String relativePath;
 	private final List<DestinationEntry> destsList;
+	private final Map<File, Long> digestByFile;
+
 	private IOException lastCopyError;
 	private FileEntryStatus currentResumeStatus;
 
-	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList) {
+	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList, final Map<File, Long> digestByFile) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
 		this.file = Objects.requireNonNull(file, "\"file\" can't to be null");
 		this.driveSN = Objects.requireNonNull(driveSN, "\"driveSN\" can't to be null");
+		this.digestByFile = Objects.requireNonNull(digestByFile, "\"digestByFile\" can't to be null");
+
 		status = new SimpleStringProperty();
 		copiesByDestination = new HashMap<>();
 
@@ -71,7 +78,28 @@ public class FileEntry implements TargetedFileEntries {
 	}
 
 	public void addDestination(final DestinationEntry destination) {
-		destination.searchCopyPresence(relativePath).ifPresentOrElse(copy -> {
+		final List<File> foundedPotential = destination.searchCopyPresence(relativePath, getDriveSNValue());
+
+		foundedPotential.stream().filter(potentialFile -> file.length() == potentialFile.length()).filter(potentialFile -> {
+			if (potentialFile.length() < maxFileSizeDigestCompute) {
+				final long potentialFileDigest = destination.getDigestByFile().computeIfAbsent(potentialFile, f -> {
+					try {
+						return FileUtils.checksumCRC32(f);
+					} catch (final IOException e) {
+						throw new RuntimeException("Can't read " + f.getPath(), e);
+					}
+				});
+				final long sourceFileDigest = digestByFile.computeIfAbsent(file, f -> {
+					try {
+						return FileUtils.checksumCRC32(f);
+					} catch (final IOException e) {
+						throw new RuntimeException("Can't read " + f.getPath(), e);
+					}
+				});
+				return potentialFileDigest == sourceFileDigest;
+			}
+			return true;
+		}).findFirst().ifPresentOrElse(copy -> {
 			if (copiesByDestination.containsKey(destination)) {
 				if (copiesByDestination.get(destination).equalsNotChanged(file)) {
 					return;
@@ -132,7 +160,12 @@ public class FileEntry implements TargetedFileEntries {
 		}
 
 		boolean equalsNotChanged(final File candidate) {
-			return candidate.equals(copy) & candidate.length() == copy.length();
+			if (candidate.equals(copy) == false) {
+				return false;
+			} else if (candidate.length() != copy.length()) {
+				return false;
+			}
+			return true;
 		}
 
 	}

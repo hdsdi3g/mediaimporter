@@ -47,14 +47,14 @@ public class CopyFilesEngine {
 	private final GlobalCopyStat globalCopyStat;
 
 	/**
-	 * No reusable
+	 * Not reusable
 	 */
-	public CopyFilesEngine(final List<FileEntry> toCopy, final List<DestinationEntry> allDestinations, final MainApp ui /*, final Consumer<ProgressUpdate> onProgressUpdate*/) {
+	public CopyFilesEngine(final List<FileEntry> toCopy, final List<DestinationEntry> allDestinations, final MainApp ui) {
 		this.allDestinations = allDestinations;
 
 		copyList = toCopy.stream().map(fileEntry -> {
 			try {
-				return new CopyOperation(fileEntry/*, onWrite*/);
+				return new CopyOperation(fileEntry);
 			} catch (final IOException e) {
 				throw new RuntimeException("Can't prepare copy operation with " + fileEntry, e);
 			}
@@ -89,6 +89,13 @@ public class CopyFilesEngine {
 				throw new RuntimeException("Can't prepare copy operation with " + fileStore, e);
 			}
 		});
+
+		/*copyList.stream().forEach(copyItem -> {
+			final FileEntry entry = copyItem.getFileEntry();
+			copyItem.getDestinationListToCopy().stream().map(DestinationEntrySlot::getStore).forEach(store -> {
+				store.add(entry.getRelativePath(), entry.getDriveSNValue(), entry.getFile());
+			});
+		});*/
 	}
 
 	/**
