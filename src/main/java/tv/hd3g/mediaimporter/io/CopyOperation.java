@@ -62,7 +62,13 @@ public class CopyOperation implements Runnable {
 		/**
 		 * BlockSize = 512
 		 */
-		buffer = ByteBuffer.allocateDirect((int) Files.getFileStore(source).getBlockSize() * 256);
+		final long fileLen = entryToCopy.getFile().length();
+		final int baseBufferSize = (int) Files.getFileStore(source).getBlockSize() * 256;
+		if (fileLen > Integer.MAX_VALUE) {
+			buffer = ByteBuffer.allocateDirect(baseBufferSize);
+		} else {
+			buffer = ByteBuffer.allocateDirect((int) Math.min(baseBufferSize, fileLen));
+		}
 		destinationListToCopy = entryToCopy.getToCopyDestinationSlotList();
 		copyStat = new CopyStat(this, entryToCopy.getFile().length());
 	}
@@ -134,7 +140,7 @@ public class CopyOperation implements Runnable {
 			long timeBeforeWrite;
 			int sizeWrited;
 			while (sourceChannel.read(buffer) > 0) {
-				if (wantToStop == true) {
+				if (wantToStop) {
 					return;
 				}
 				buffer.flip();
@@ -144,7 +150,7 @@ public class CopyOperation implements Runnable {
 					timeBeforeWrite = System.nanoTime();
 					sizeWrited = entry.getKey().write(buffer.asReadOnlyBuffer());
 					copyStat.onWrite(entry.getValue(), sizeWrited, System.nanoTime() - timeBeforeWrite);
-					if (wantToStop == true) {
+					if (wantToStop) {
 						return;
 					}
 				}
@@ -166,9 +172,11 @@ public class CopyOperation implements Runnable {
 				try {
 					entry.getKey().close();
 
-					final File expectedFile = pathByFileChannel.get(entry.getKey()).toFile();
-					final File realCopiedFile = new File(expectedFile.getPath() + suffixCopyFileName);
-					FileUtils.moveFile(realCopiedFile, expectedFile);
+					if (wantToStop == false) {
+						final File expectedFile = pathByFileChannel.get(entry.getKey()).toFile();
+						final File realCopiedFile = new File(expectedFile.getPath() + suffixCopyFileName);
+						FileUtils.moveFile(realCopiedFile, expectedFile);
+					}
 				} catch (final IOException e) {
 					log.warn("Can't close file " + entry.getValue() + suffixCopyFileName, e);
 					copyStat.setLastException(e);

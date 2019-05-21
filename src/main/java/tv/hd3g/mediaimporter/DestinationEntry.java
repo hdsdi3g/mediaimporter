@@ -46,7 +46,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 	private final SimpleLongProperty writeSpeed;
 	private final AtomicLong copiedDatasBytes;
 	private final AtomicLong copiedDurationsNanoSec;
-	private final ConcurrentHashMap<File, Long> digestByFile;
+	private final ConcurrentHashMap<File, Long> digestByFileCache;
 
 	private final ObservableList<DestinationEntrySlot> slots;
 	private DestinationEntrySlot currentSessionSlot;
@@ -58,7 +58,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		slots = FXCollections.observableList(new ArrayList<>());
 		copiedDatasBytes = new AtomicLong(0);
 		copiedDurationsNanoSec = new AtomicLong(0);
-		digestByFile = new ConcurrentHashMap<>();
+		digestByFileCache = new ConcurrentHashMap<>();
 	}
 
 	static final FilenameFilter validDirNonHidden = (dir, name) -> {
@@ -66,8 +66,8 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		return file.isDirectory() & file.isHidden() == false & file.getName().startsWith(".") == false;
 	};
 
-	Map<File, Long> getDigestByFile() {
-		return digestByFile;
+	Map<File, Long> getdigestByFileCache() {
+		return digestByFileCache;
 	}
 
 	public AtomicLong getCopiedDatasBytes() {

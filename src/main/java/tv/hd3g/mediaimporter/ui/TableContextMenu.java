@@ -14,7 +14,7 @@
  * Copyright (C) hdsdi3g for hd3g.tv 2019
  *
 */
-package tv.hd3g.mediaimporter;
+package tv.hd3g.mediaimporter.ui;
 
 import java.util.List;
 import java.util.Objects;
@@ -26,6 +26,8 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.TableView;
 import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.MouseEvent;
+import tv.hd3g.mediaimporter.MainApp;
+import tv.hd3g.mediaimporter.TargetedFileEntries;
 import tv.hd3g.mediaimporter.tools.NavigateTo;
 import tv.hd3g.processlauncher.tool.ToolRunner;
 

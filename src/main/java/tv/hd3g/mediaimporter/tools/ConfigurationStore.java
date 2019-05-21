@@ -14,7 +14,7 @@
  * Copyright (C) hdsdi3g for hd3g.tv 2019
  *
 */
-package tv.hd3g.mediaimporter;
+package tv.hd3g.mediaimporter.tools;
 
 import java.io.File;
 import java.io.IOException;
@@ -46,14 +46,15 @@ import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyEvent;
-import tv.hd3g.mediaimporter.tools.FileSanity;
+import tv.hd3g.mediaimporter.DestinationEntry;
+import tv.hd3g.mediaimporter.SourceEntry;
 
 public class ConfigurationStore {
 	private static Logger log = LogManager.getLogger();
 
 	private final String url;
 
-	public ConfigurationStore(final String name, final ObservableList<SourceEntry> sourcesList, final ObservableList<DestinationEntry> destsList, final TextField inputPrefixDirName, final FileSanity fileSanity, final Map<File, Long> digestByFile) {
+	public ConfigurationStore(final String name, final ObservableList<SourceEntry> sourcesList, final ObservableList<DestinationEntry> destsList, final TextField inputPrefixDirName, final FileSanity fileSanity, final Map<File, Long> digestByFileCache) {
 		Objects.requireNonNull(sourcesList, "\"sourcesList\" can't to be null");
 		Objects.requireNonNull(destsList, "\"destsList\" can't to be null");
 
@@ -100,7 +101,7 @@ public class ConfigurationStore {
 					if (f.exists() == false) {
 						continue;
 					}
-					sourcesList.add(new SourceEntry(f, fileSanity, digestByFile));
+					sourcesList.add(new SourceEntry(f, fileSanity, digestByFileCache));
 				}
 
 				final ResultSet rsDests = stmt.executeQuery("SELECT path FROM destinations");
@@ -127,7 +128,7 @@ public class ConfigurationStore {
 		sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
 			while (change.next()) {
 				change.getAddedSubList().forEach(entry -> {
-					final String path = entry.rootPath.getPath();
+					final String path = entry.getRootPath().getPath();
 					delayedExecutor.execute(() -> {
 						prepareStatement("INSERT INTO sources(path) VALUES(?)", pstmt -> {
 							log.debug("INSERT sources " + path);
@@ -136,7 +137,7 @@ public class ConfigurationStore {
 					});
 				});
 				change.getRemoved().forEach(entry -> {
-					final String path = entry.rootPath.getPath();
+					final String path = entry.getRootPath().getPath();
 					delayedExecutor.execute(() -> {
 						prepareStatement("DELETE FROM sources WHERE path = ?", pstmt -> {
 							log.debug("DELETE sources " + path);
@@ -149,7 +150,7 @@ public class ConfigurationStore {
 		destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
 			while (change.next()) {
 				change.getAddedSubList().forEach(entry -> {
-					final String path = entry.rootPath.getPath();
+					final String path = entry.getRootPath().getPath();
 					delayedExecutor.execute(() -> {
 						prepareStatement("INSERT INTO destinations(path) VALUES(?)", pstmt -> {
 							log.debug("INSERT destinations " + path);
@@ -158,7 +159,7 @@ public class ConfigurationStore {
 					});
 				});
 				change.getRemoved().forEach(entry -> {
-					final String path = entry.rootPath.getPath();
+					final String path = entry.getRootPath().getPath();
 					delayedExecutor.execute(() -> {
 						prepareStatement("DELETE FROM destinations WHERE path = ?", pstmt -> {
 							log.debug("DELETE destinations " + path);

@@ -54,8 +54,6 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
-import javafx.scene.control.Labeled;
-import javafx.scene.control.TableCell;
 import javafx.scene.control.TableRow;
 import javafx.scene.image.Image;
 import javafx.scene.input.MouseButton;
@@ -63,22 +61,27 @@ import javafx.scene.layout.BorderPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import tv.hd3g.mediaimporter.io.CopyFilesEngine;
+import tv.hd3g.mediaimporter.tools.ConfigurationStore;
 import tv.hd3g.mediaimporter.tools.DriveProbe;
 import tv.hd3g.mediaimporter.tools.FileSanity;
 import tv.hd3g.mediaimporter.tools.NavigateTo;
+import tv.hd3g.mediaimporter.ui.TableCellFileSize;
+import tv.hd3g.mediaimporter.ui.TableContextMenu;
 import tv.hd3g.processlauncher.cmdline.ExecutableFinder;
 import tv.hd3g.processlauncher.tool.ToolRunner;
 
 public class MainApp extends Application {
 	private static Logger log = LogManager.getLogger();
-
 	public static final Logger log4javaFx = LogManager.getLogger("javafx");
 
-	final static ResourceBundle messages;
+	public final static ResourceBundle messages;
 
 	static {
 		messages = ResourceBundle.getBundle(MainApp.class.getPackage().getName() + ".messages");
 	}
+	private static final DecimalFormat decimalFormat1digits = new DecimalFormat("###,###.#");
+	private static final DecimalFormat decimalFormat2digits = new DecimalFormat("###,###.##");
+	private static final BiFunction<Map<File, String>, SourceEntry, String> driveSNFromProbeResult = (probeResult, entry) -> probeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), messages.getString("driveSNDefault"));
 
 	private final ObservableList<SourceEntry> sourcesList;
 	private final ObservableList<DestinationEntry> destsList;
@@ -87,7 +90,7 @@ public class MainApp extends Application {
 	private final NavigateTo navigateTo;
 	private final SimpleObjectProperty<CopyFilesEngine> currentCopyEngine;
 	private final FileSanity fileSanity;
-	private final ConcurrentHashMap<File, Long> digestByFile;
+	private final ConcurrentHashMap<File, Long> digestByFileCache;
 
 	private final SimpleObjectProperty<Map<File, String>> lastSNDrivesProbeResult;
 	private final ScheduledExecutorService driveSNUpdaterRegularExecutor;
@@ -100,7 +103,7 @@ public class MainApp extends Application {
 		fileList = FXCollections.observableList(new ArrayList<FileEntry>());
 		fileSanity = FileSanity.get();
 		navigateTo = NavigateTo.get();
-		digestByFile = new ConcurrentHashMap<>();
+		digestByFileCache = new ConcurrentHashMap<>();
 		toolRunner = new ToolRunner(new ExecutableFinder(), 2);
 		currentCopyEngine = new SimpleObjectProperty<>(null);
 		lastSNDrivesProbeResult = new SimpleObjectProperty<>();
@@ -153,7 +156,7 @@ public class MainApp extends Application {
 			stage.getIcons().add(appIcon);
 			// image_tasks = new Image(getClass().getResourceAsStream("tasks.png"), 10, 10, false, false);
 
-			new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity, digestByFile);
+			new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity, digestByFileCache);
 
 			stage.setScene(scene);
 			stage.setTitle("Media importer");
@@ -177,54 +180,290 @@ public class MainApp extends Application {
 				stage.close();
 			});
 
-			initSourceZone();
-			initDestZone();
-			initFileZone();
-			initActionZone();
-			initTablesRowFactory();
-			initTablesContextMenu();
+			/**
+			 * initSourceZone
+			 */
+			mainPanel.getTableSources().setItems(sourcesList);
+			mainPanel.getTableSourcesColPath().setCellValueFactory(SourceEntry.getColPathFactory());
+
+			mainPanel.getBtnAddSourceDir().setOnAction(event -> {
+				event.consume();
+				selectDirectory("addSourceDirectory").ifPresent(file -> {
+					final SourceEntry toAdd = new SourceEntry(file, fileSanity, digestByFileCache);
+					if (sourcesList.contains(toAdd) == false) {
+						log.info("Add new source directory: " + file);
+						sourcesList.add(toAdd);
+					}
+				});
+			});
+			sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
+				while (change.next()) {
+					change.getAddedSubList().stream().filter(BaseSourceDestEntry.isStoredOn(sourcesList, destsList)).forEach(entry -> {
+						MainApp.log4javaFx.warn(messages.getString("dontAllowDirs") + ": " + entry);
+						sourcesList.remove(entry);
+					});
+				}
+			});
+			mainPanel.getBtnRemoveSourceDir().setOnAction(event -> {
+				event.consume();
+				final SourceEntry selected = mainPanel.getTableSources().getSelectionModel().getSelectedItem();
+				if (selected != null) {
+					log.debug("Remove source dir: " + selected);
+					sourcesList.remove(selected);
+				}
+			});
+			mainPanel.getTableSources().getSelectionModel().selectedItemProperty().addListener((observable_value, old_value, new_value) -> {
+				mainPanel.getBtnRemoveSourceDir().setDisable(new_value == null);
+			});
+
+			/**
+			 * initDestZone
+			 */
+			mainPanel.getTableDestinations().setItems(destsList);
+			mainPanel.getTableDestinationsColPath().setCellValueFactory(DestinationEntry.getColPathFactory());
+			mainPanel.getTableDestinationsColAvailable().setCellValueFactory(DestinationEntry.getColAvailableFactory());
+			mainPanel.getTableDestinationsColSpeed().setCellValueFactory(DestinationEntry.getColAvailableSpeed());
+			mainPanel.getTableDestinationsColSlots().setCellValueFactory(DestinationEntry.getColAvailableSlots());
+			destsList.forEach(DestinationEntry::updateSlotsContent);
+
+			mainPanel.getTableDestinationsColAvailable().setCellFactory(col -> new TableCellFileSize<>());
+			mainPanel.getTableDestinationsColSpeed().setCellFactory(col -> new TableCellFileSize<>());
+
+			destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
+				while (change.next()) {
+					change.getAddedSubList().stream().filter(BaseSourceDestEntry.isStoredOn(sourcesList, destsList)).forEach(entry -> {
+						MainApp.log4javaFx.warn(messages.getString("dontAllowDirs") + ": " + entry);
+						destsList.remove(entry);
+					});
+				}
+			});
+			mainPanel.getBtnAddDestinationDir().setOnAction(event -> {
+				event.consume();
+				selectDirectory("addDestDirectory").ifPresent(file -> {
+					final DestinationEntry toAdd = new DestinationEntry(file);
+					if (destsList.contains(toAdd) == false) {
+						log.info("Add new dest directory: " + file);
+						toAdd.updateSlotsContent();
+						destsList.add(toAdd);
+						fileList.forEach(fileEntry -> {
+							fileEntry.addDestination(toAdd);
+						});
+					}
+				});
+			});
+			mainPanel.getBtnRemoveDestinationDir().setOnAction(event -> {
+				event.consume();
+				final DestinationEntry selected = mainPanel.getTableDestinations().getSelectionModel().getSelectedItem();
+				if (selected != null) {
+					log.debug("Remove dest dir: " + selected);
+					destsList.remove(selected);
+
+					log.debug("Update all actual references: " + selected);
+					fileList.forEach(fileEntry -> {
+						fileEntry.removeDestination(selected);
+					});
+				}
+			});
+			mainPanel.getTableDestinations().getSelectionModel().selectedItemProperty().addListener((observable_value, old_value, new_value) -> {
+				mainPanel.getBtnRemoveDestinationDir().setDisable(new_value == null);
+			});
+
+			/**
+			 * initFileZone
+			 */
+			final Supplier<Boolean> isBtnAddSourceToScanDisabled = () -> {
+				return sourcesList.isEmpty() | destsList.isEmpty() | lastSNDrivesProbeResult.isNull().get();
+			};
+
+			mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
+
+			sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
+				while (change.next()) {
+					if (change.wasRemoved() | change.wasAdded()) {
+						mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
+					}
+				}
+			});
+			destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
+				while (change.next()) {
+					if (change.wasRemoved() | change.wasAdded()) {
+						mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
+					}
+				}
+			});
+			lastSNDrivesProbeResult.addListener((observable, oldValue, newValue) -> {
+				mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
+			});
+
+			mainPanel.getTableFiles().setItems(fileList);
+			mainPanel.getTableFilesColSource().setCellValueFactory(FileEntry.getColSourceFactory());
+			mainPanel.getTableFilesColDriveSN().setCellValueFactory(FileEntry.getColDriveSNFactory());
+			mainPanel.getTableFilesColPath().setCellValueFactory(FileEntry.getColPathFactory());
+			mainPanel.getTableFilesColSize().setCellValueFactory(FileEntry.getColSizeFactory());
+			mainPanel.getTableFilesColStatus().setCellValueFactory(FileEntry.getColStatusFactory());
+			mainPanel.getTableFilesColSize().setCellFactory(col -> new TableCellFileSize<>());
+
+			mainPanel.getBtnAddSourceToScan().setOnAction(event -> {
+				event.consume();
+				if (sourcesList.isEmpty()) {
+					return;
+				}
+				log.info("Start scan source dirs");
+				mainPanel.getBtnClearScanlist().setDisable(true);
+
+				updateSNDrives();
+
+				fileList.removeIf(fileEntry -> {
+					return fileEntry.updateState();
+				});
+
+				digestByFileCache.clear();
+
+				// TODO Test media change
+
+				sourcesList.forEach(entry -> {
+					final SimpleStringProperty driveSN = new SimpleStringProperty();
+					if (lastSNDrivesProbeResult.isNotNull().get()) {
+						driveSN.set(driveSNFromProbeResult.apply(lastSNDrivesProbeResult.get(), entry));
+					} else {
+						driveSN.set(driveSNFromProbeResult.apply(Collections.emptyMap(), entry));
+					}
+					lastSNDrivesProbeResult.addListener((observable, oldValue, newValue) -> {
+						driveSN.set(driveSNFromProbeResult.apply(newValue, entry));
+					});
+
+					try {
+						final List<FileEntry> newFilesEntries = entry.scanSource(fileList, driveSN, destsList);
+
+						if (newFilesEntries.isEmpty() == false) {
+							log.info("Found " + newFilesEntries.size() + " new file(s), start update copies references");
+							destsList.forEach(destination -> {
+								newFilesEntries.forEach(newFileEntry -> {
+									newFileEntry.addDestination(destination);
+								});
+							});
+						}
+					} catch (final IOException e) {
+						MainApp.log4javaFx.error("Can't scan " + entry, e);
+					}
+				});
+
+				final LongSummaryStatistics stats = fileList.stream().filter(FileEntry.needsToBeCopied).mapToLong(fileEntry -> fileEntry.getFile().length()).summaryStatistics();
+				if (stats.getCount() > 0) {
+					final String label = String.format(messages.getString("labelProgressReady"), stats.getCount(), MainApp.byteCountToDisplaySizeWithPrecision(stats.getSum()));
+					mainPanel.getLblProgressionCounter().setText(label);
+					mainPanel.getBtnStartCopy().setDisable(false);
+				}
+
+				mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
+
+				displayStatusMsgBox();
+			});
+			mainPanel.getBtnClearScanlist().setOnAction(event -> {
+				event.consume();
+				log.info("Clear scan list");
+				fileList.clear();
+				mainPanel.getBtnStartCopy().setDisable(true);
+				mainPanel.getBtnStopCopy().setDisable(true);
+				mainPanel.getLblProgressionCounter().setText("");
+			});
+
+			/**
+			 * initActionZone
+			 */
+			mainPanel.getBtnStartCopy().setOnAction(event -> {
+				event.consume();
+				if (currentCopyEngine.isNotNull().get()) {
+					log4javaFx.error("Can't create a new copy operation");
+					return;
+				}
+
+				destsList.forEach(dest -> {
+					dest.prepareNewSessionSlot(mainPanel.getInputPrefixDirName().getText());
+				});
+
+				log.info("Prepare and start copy operation");
+
+				mainPanel.getBtnAddSourceDir().setDisable(true);
+				mainPanel.getBtnRemoveSourceDir().setDisable(true);
+				mainPanel.getBtnAddDestinationDir().setDisable(true);
+				mainPanel.getBtnRemoveDestinationDir().setDisable(true);
+				mainPanel.getBtnAddSourceToScan().setDisable(true);
+				mainPanel.getInputPrefixDirName().setDisable(true);
+				mainPanel.getBtnStartCopy().setDisable(true);
+				mainPanel.getBtnStopCopy().setDisable(false);
+				mainPanel.getProgressBar().setProgress(-1);
+
+				try {
+					final CopyFilesEngine copyFilesEngine = new CopyFilesEngine(fileList, destsList, this);
+					currentCopyEngine.set(copyFilesEngine);
+					copyFilesEngine.asyncStart().thenRunAsync(() -> {
+						Platform.runLater(() -> {
+							afterCopyOperation();
+						});
+					});
+				} catch (final Exception e) {
+					log4javaFx.error("Can't process copy operation", e);
+					afterCopyOperation();
+				}
+			});
+			mainPanel.getBtnStopCopy().setOnAction(event -> {
+				event.consume();
+				if (currentCopyEngine.isNull().get()) {
+					return;
+				}
+				log.info("Manual stop copy action");
+
+				currentCopyEngine.get().asyncStop(() -> {
+					Platform.runLater(() -> {
+						afterCopyOperation();
+					});
+				});
+			});
+
+			/**
+			 * initTablesRowFactory
+			 */
+			mainPanel.getTableSources().setRowFactory(tv -> {
+				final TableRow<SourceEntry> row = new TableRow<>();
+				row.setOnMouseClicked(mouseEvent -> {
+					if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
+						navigateTo.navigateTo(row.getItem().rootPath, toolRunner);
+					}
+				});
+				return row;
+			});
+
+			mainPanel.getTableDestinations().setRowFactory(tv -> {
+				final TableRow<DestinationEntry> row = new TableRow<>();
+				row.setOnMouseClicked(mouseEvent -> {
+					if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
+						navigateTo.navigateTo(row.getItem().rootPath, toolRunner);
+					}
+				});
+				return row;
+			});
+
+			mainPanel.getTableFiles().setRowFactory(tv -> {
+				final TableRow<FileEntry> row = new TableRow<>();
+				row.setOnMouseClicked(mouseEvent -> {
+					if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
+						navigateTo.navigateTo(row.getItem().getFile(), toolRunner);
+					}
+				});
+				return row;
+			});
+
+			/**
+			 * initTablesContextMenu
+			 */
+			new TableContextMenu(mainPanel.getTableSources(), navigateTo, toolRunner);
+			new TableContextMenu(mainPanel.getTableDestinations(), navigateTo, toolRunner);
+			new TableContextMenu(mainPanel.getTableFiles(), navigateTo, toolRunner);
 		} catch (final Exception e) {
 			log.error("Error during loading app", e);
 			System.exit(1);
 		}
-	}
-
-	private void initTablesRowFactory() {
-		mainPanel.getTableSources().setRowFactory(tv -> {
-			final TableRow<SourceEntry> row = new TableRow<>();
-			row.setOnMouseClicked(mouseEvent -> {
-				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-					navigateTo.navigateTo(row.getItem().rootPath, toolRunner);
-				}
-			});
-			return row;
-		});
-
-		mainPanel.getTableDestinations().setRowFactory(tv -> {
-			final TableRow<DestinationEntry> row = new TableRow<>();
-			row.setOnMouseClicked(mouseEvent -> {
-				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-					navigateTo.navigateTo(row.getItem().rootPath, toolRunner);
-				}
-			});
-			return row;
-		});
-
-		mainPanel.getTableFiles().setRowFactory(tv -> {
-			final TableRow<FileEntry> row = new TableRow<>();
-			row.setOnMouseClicked(mouseEvent -> {
-				if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-					navigateTo.navigateTo(row.getItem().getFile(), toolRunner);
-				}
-			});
-			return row;
-		});
-	}
-
-	private void initTablesContextMenu() {
-		new TableContextMenu(mainPanel.getTableSources(), navigateTo, toolRunner);
-		new TableContextMenu(mainPanel.getTableDestinations(), navigateTo, toolRunner);
-		new TableContextMenu(mainPanel.getTableFiles(), navigateTo, toolRunner);
 	}
 
 	@Override
@@ -239,60 +478,12 @@ public class MainApp extends Application {
 		return Optional.ofNullable(directoryChooser.showDialog(stage));
 	}
 
-	private void initSourceZone() {
-		mainPanel.getTableSources().setItems(sourcesList);
-		mainPanel.getTableSourcesColPath().setCellValueFactory(SourceEntry.getColPathFactory());
-
-		mainPanel.getBtnAddSourceDir().setOnAction(event -> {
-			event.consume();
-			selectDirectory("addSourceDirectory").ifPresent(file -> {
-				final SourceEntry toAdd = new SourceEntry(file, fileSanity, digestByFile);
-				if (sourcesList.contains(toAdd) == false) {
-					log.info("Add new source directory: " + file);
-					sourcesList.add(toAdd);
-				}
-			});
-		});
-		sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
-			while (change.next()) {
-				change.getAddedSubList().stream().filter(BaseSourceDestEntry.isStoredOn(sourcesList, destsList)).forEach(entry -> {
-					MainApp.log4javaFx.warn(messages.getString("dontAllowDirs") + ": " + entry);
-					sourcesList.remove(entry);
-				});
-			}
-		});
-		mainPanel.getBtnRemoveSourceDir().setOnAction(event -> {
-			event.consume();
-			final SourceEntry selected = mainPanel.getTableSources().getSelectionModel().getSelectedItem();
-			if (selected != null) {
-				log.debug("Remove source dir: " + selected);
-				sourcesList.remove(selected);
-			}
-		});
-		mainPanel.getTableSources().getSelectionModel().selectedItemProperty().addListener((observable_value, old_value, new_value) -> {
-			mainPanel.getBtnRemoveSourceDir().setDisable(new_value == null);
-		});
-	}
-
-	private static void roundSizeValues(final Number value, final boolean empty, final Labeled label) {
-		if (empty) {
-			label.setText(null);
-		} else if (value.longValue() == 0l) {
-			label.setText(null);
-		} else {
-			label.setText(byteCountToDisplaySizeWithPrecision(value.longValue()));
-		}
-	}
-
-	private static final DecimalFormat decimalFormat1digits = new DecimalFormat("###,###.#");
-	private static final DecimalFormat decimalFormat2digits = new DecimalFormat("###,###.##");
-
 	public static String byteCountToDisplaySizeWithPrecision(final long bytes) {
 		if (bytes == 0) {
 			return "0 Bytes";
 		}
 
-		final long k = 1024;
+		final long k = 1000;
 		final String[] sizes = new String[] { "Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
 
 		final long i = Math.round(Math.floor(Math.log(bytes) / Math.log(k)));
@@ -305,225 +496,6 @@ public class MainApp extends Application {
 		} else {
 			return decimalFormat2digits.format(value) + " " + sizes[(int) i];
 		}
-	}
-
-	private void initDestZone() {
-		mainPanel.getTableDestinations().setItems(destsList);
-		mainPanel.getTableDestinationsColPath().setCellValueFactory(DestinationEntry.getColPathFactory());
-		mainPanel.getTableDestinationsColAvailable().setCellValueFactory(DestinationEntry.getColAvailableFactory());
-		mainPanel.getTableDestinationsColSpeed().setCellValueFactory(DestinationEntry.getColAvailableSpeed());
-		mainPanel.getTableDestinationsColSlots().setCellValueFactory(DestinationEntry.getColAvailableSlots());
-		destsList.forEach(DestinationEntry::updateSlotsContent);
-
-		mainPanel.getTableDestinationsColAvailable().setCellFactory(col -> new TableCell<>() {
-			public void updateItem(final Number value, final boolean empty) {
-				super.updateItem(value, empty);
-				roundSizeValues(value, empty, this);
-			}
-		});
-		mainPanel.getTableDestinationsColSpeed().setCellFactory(col -> new TableCell<>() {
-			public void updateItem(final Number value, final boolean empty) {
-				super.updateItem(value, empty);
-				roundSizeValues(value, empty, this);
-			}
-		});
-		destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
-			while (change.next()) {
-				change.getAddedSubList().stream().filter(BaseSourceDestEntry.isStoredOn(sourcesList, destsList)).forEach(entry -> {
-					MainApp.log4javaFx.warn(messages.getString("dontAllowDirs") + ": " + entry);
-					destsList.remove(entry);
-				});
-			}
-		});
-		mainPanel.getBtnAddDestinationDir().setOnAction(event -> {
-			event.consume();
-			selectDirectory("addDestDirectory").ifPresent(file -> {
-				final DestinationEntry toAdd = new DestinationEntry(file);
-				if (destsList.contains(toAdd) == false) {
-					log.info("Add new dest directory: " + file);
-					toAdd.updateSlotsContent();
-					destsList.add(toAdd);
-					fileList.forEach(fileEntry -> {
-						fileEntry.addDestination(toAdd);
-					});
-				}
-			});
-		});
-		mainPanel.getBtnRemoveDestinationDir().setOnAction(event -> {
-			event.consume();
-			final DestinationEntry selected = mainPanel.getTableDestinations().getSelectionModel().getSelectedItem();
-			if (selected != null) {
-				log.debug("Remove dest dir: " + selected);
-				destsList.remove(selected);
-
-				log.debug("Update all actual references: " + selected);
-				fileList.forEach(fileEntry -> {
-					fileEntry.removeDestination(selected);
-				});
-			}
-		});
-		mainPanel.getTableDestinations().getSelectionModel().selectedItemProperty().addListener((observable_value, old_value, new_value) -> {
-			mainPanel.getBtnRemoveDestinationDir().setDisable(new_value == null);
-		});
-	}
-
-	private static final BiFunction<Map<File, String>, SourceEntry, String> driveSNFromProbeResult = (probeResult, entry) -> probeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), messages.getString("driveSNDefault"));
-
-	private void initFileZone() {
-		final Supplier<Boolean> isBtnAddSourceToScanDisabled = () -> {
-			return sourcesList.isEmpty() | destsList.isEmpty() | lastSNDrivesProbeResult.isNull().get();
-		};
-
-		mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
-
-		sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
-			while (change.next()) {
-				if (change.wasRemoved() | change.wasAdded()) {
-					mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
-				}
-			}
-		});
-		destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
-			while (change.next()) {
-				if (change.wasRemoved() | change.wasAdded()) {
-					mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
-				}
-			}
-		});
-		lastSNDrivesProbeResult.addListener((observable, oldValue, newValue) -> {
-			mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
-		});
-
-		mainPanel.getTableFiles().setItems(fileList);
-		mainPanel.getTableFilesColSource().setCellValueFactory(FileEntry.getColSourceFactory());
-		mainPanel.getTableFilesColDriveSN().setCellValueFactory(FileEntry.getColDriveSNFactory());
-		mainPanel.getTableFilesColPath().setCellValueFactory(FileEntry.getColPathFactory());
-		mainPanel.getTableFilesColSize().setCellValueFactory(FileEntry.getColSizeFactory());
-		mainPanel.getTableFilesColStatus().setCellValueFactory(FileEntry.getColStatusFactory());
-
-		mainPanel.getTableFilesColSize().setCellFactory(col -> new TableCell<>() {
-			public void updateItem(final Number value, final boolean empty) {
-				super.updateItem(value, empty);
-				roundSizeValues(value, empty, this);
-			}
-		});
-
-		mainPanel.getBtnAddSourceToScan().setOnAction(event -> {
-			event.consume();
-			if (sourcesList.isEmpty()) {
-				return;
-			}
-			log.info("Start scan source dirs");
-			mainPanel.getBtnClearScanlist().setDisable(true);
-
-			updateSNDrives();
-
-			fileList.removeIf(fileEntry -> {
-				return fileEntry.updateState();
-			});
-
-			digestByFile.clear();
-
-			// TODO Test media change
-
-			sourcesList.forEach(entry -> {
-				final SimpleStringProperty driveSN = new SimpleStringProperty();
-				if (lastSNDrivesProbeResult.isNotNull().get()) {
-					driveSN.set(driveSNFromProbeResult.apply(lastSNDrivesProbeResult.get(), entry));
-				} else {
-					driveSN.set(driveSNFromProbeResult.apply(Collections.emptyMap(), entry));
-				}
-				lastSNDrivesProbeResult.addListener((observable, oldValue, newValue) -> {
-					driveSN.set(driveSNFromProbeResult.apply(newValue, entry));
-				});
-
-				try {
-					final List<FileEntry> newFilesEntries = entry.scanSource(fileList, driveSN, destsList);
-
-					if (newFilesEntries.isEmpty() == false) {
-						log.info("Found " + newFilesEntries.size() + " new file(s), start update copies references");
-						destsList.forEach(destination -> {
-							newFilesEntries.forEach(newFileEntry -> {
-								newFileEntry.addDestination(destination);
-							});
-						});
-					}
-				} catch (final IOException e) {
-					MainApp.log4javaFx.error("Can't scan " + entry, e);
-				}
-			});
-
-			final LongSummaryStatistics stats = fileList.stream().filter(FileEntry.needsToBeCopied).mapToLong(fileEntry -> fileEntry.getFile().length()).summaryStatistics();
-			if (stats.getCount() > 0) {
-				final String label = String.format(messages.getString("labelProgressReady"), stats.getCount(), MainApp.byteCountToDisplaySizeWithPrecision(stats.getSum()));
-				mainPanel.getLblProgressionCounter().setText(label);
-				mainPanel.getBtnStartCopy().setDisable(false);
-			}
-
-			mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
-
-			displayStatusMsgBox();
-		});
-		mainPanel.getBtnClearScanlist().setOnAction(event -> {
-			event.consume();
-			log.info("Clear scan list");
-			fileList.clear();
-			mainPanel.getBtnStartCopy().setDisable(true);
-			mainPanel.getBtnStopCopy().setDisable(true);
-			mainPanel.getLblProgressionCounter().setText("");
-		});
-	}
-
-	private void initActionZone() {
-		mainPanel.getBtnStartCopy().setOnAction(event -> {
-			event.consume();
-			if (currentCopyEngine.isNotNull().get()) {
-				log4javaFx.error("Can't create a new copy operation");
-				return;
-			}
-
-			destsList.forEach(dest -> {
-				dest.prepareNewSessionSlot(mainPanel.getInputPrefixDirName().getText());
-			});
-
-			log.info("Prepare and start copy operation");
-
-			mainPanel.getBtnAddSourceDir().setDisable(true);
-			mainPanel.getBtnRemoveSourceDir().setDisable(true);
-			mainPanel.getBtnAddDestinationDir().setDisable(true);
-			mainPanel.getBtnRemoveDestinationDir().setDisable(true);
-			mainPanel.getBtnAddSourceToScan().setDisable(true);
-			mainPanel.getInputPrefixDirName().setDisable(true);
-			mainPanel.getBtnStartCopy().setDisable(true);
-			mainPanel.getBtnStopCopy().setDisable(false);
-			mainPanel.getProgressBar().setProgress(-1);
-
-			try {
-				final CopyFilesEngine copyFilesEngine = new CopyFilesEngine(fileList, destsList, this);
-				currentCopyEngine.set(copyFilesEngine);
-				copyFilesEngine.asyncStart().thenRunAsync(() -> {
-					Platform.runLater(() -> {
-						afterCopyOperation();
-					});
-				});
-			} catch (final Exception e) {
-				log4javaFx.error("Can't process copy operation", e);
-				afterCopyOperation();
-			}
-		});
-		mainPanel.getBtnStopCopy().setOnAction(event -> {
-			event.consume();
-			if (currentCopyEngine.isNull().get()) {
-				return;
-			}
-			log.info("Manual stop copy action");
-
-			currentCopyEngine.get().asyncStop(() -> {
-				Platform.runLater(() -> {
-					afterCopyOperation();
-				});
-			});
-		});
 	}
 
 	public void updateProgress(final double progressRate, final int filesCopied, final int totalFiles, final long datasCopiedBytes, final long totalDatasBytes, final long etaMsec, final long meanCopySpeedBytesPerSec, final long instantCopySpeedBytesPerSec) {
@@ -594,35 +566,6 @@ public class MainApp extends Application {
 			final String size = byteCountToDisplaySizeWithPrecision(sizeByStatuses.get(status).longValue());
 			return String.format(messages.getString("statusMsgboxContent_" + status.name()), count, size);
 		}).collect(Collectors.joining(System.lineSeparator())));
-
-		// fileList.get(0).getFile()
-
-		/*final GridPane expContent = new GridPane();
-		expContent.setMaxWidth(Double.MAX_VALUE);
-		int i = 0;
-
-		expContent.add(new Label("‹" + event.getThreadName() + "›"), 0, i++);
-		expContent.add(new Label(" ‣ " + event.getSource().toString()), 0, i++);
-
-		final Throwable error = event.getThrown();
-		if (error != null) {
-			final StringWriter sw = new StringWriter();
-			final PrintWriter pw = new PrintWriter(sw);
-			error.printStackTrace(pw);
-
-			final TextArea textArea = new TextArea(sw.toString());
-			textArea.setEditable(false);
-			textArea.setWrapText(true);
-
-			textArea.setMaxWidth(Double.MAX_VALUE);
-			textArea.setMaxHeight(Double.MAX_VALUE);
-			GridPane.setVgrow(textArea, Priority.ALWAYS);
-			GridPane.setHgrow(textArea, Priority.ALWAYS);
-			expContent.add(new Label(messages.getString("alertDisplayStacktrace")), 0, i++);
-			expContent.add(textArea, 0, i++);
-		}
-		alert.getDialogPane().setExpandableContent(expContent);
-		*/
 
 		((Stage) alert.getDialogPane().getScene().getWindow()).getIcons().add(appIcon);
 		alert.showAndWait();

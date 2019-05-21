@@ -28,7 +28,7 @@ import org.apache.commons.io.FileUtils;
 
 import javafx.collections.ObservableList;
 
-public class BaseSourceDestEntry implements TargetedFileEntries {
+public abstract class BaseSourceDestEntry implements TargetedFileEntries {
 	protected final File rootPath;
 
 	public BaseSourceDestEntry(final File rootPath) {
@@ -102,4 +102,7 @@ public class BaseSourceDestEntry implements TargetedFileEntries {
 		return true;
 	}
 
+	public File getRootPath() {
+		return rootPath;
+	}
 }

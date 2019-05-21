@@ -20,7 +20,7 @@ import java.io.File;
 import java.util.List;
 import java.util.Objects;
 
-interface TargetedFileEntries {
+public interface TargetedFileEntries {
 
 	List<Entry> getTargetedFileEntries();
 

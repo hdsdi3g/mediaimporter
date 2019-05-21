@@ -45,19 +45,19 @@ public class FileEntry implements TargetedFileEntries {
 	private final File file;
 	private final SimpleStringProperty status;
 	private final SimpleStringProperty driveSN;
-	private final Map<DestinationEntry, CopyFileReference> copiesByDestination;
+	private final Map<DestinationEntry, CopiedFileReference> copiesByDestination;
 	private final String relativePath;
 	private final List<DestinationEntry> destsList;
-	private final Map<File, Long> digestByFile;
+	private final Map<File, Long> digestByFileCache;
 
 	private IOException lastCopyError;
 	private FileEntryStatus currentResumeStatus;
 
-	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList, final Map<File, Long> digestByFile) {
+	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList, final Map<File, Long> digestByFileCache) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
 		this.file = Objects.requireNonNull(file, "\"file\" can't to be null");
 		this.driveSN = Objects.requireNonNull(driveSN, "\"driveSN\" can't to be null");
-		this.digestByFile = Objects.requireNonNull(digestByFile, "\"digestByFile\" can't to be null");
+		this.digestByFileCache = Objects.requireNonNull(digestByFileCache, "\"digestByFileCache\" can't to be null");
 
 		status = new SimpleStringProperty();
 		copiesByDestination = new HashMap<>();
@@ -82,14 +82,14 @@ public class FileEntry implements TargetedFileEntries {
 
 		foundedPotential.stream().filter(potentialFile -> file.length() == potentialFile.length()).filter(potentialFile -> {
 			if (potentialFile.length() < maxFileSizeDigestCompute) {
-				final long potentialFileDigest = destination.getDigestByFile().computeIfAbsent(potentialFile, f -> {
+				final long potentialFileDigest = destination.getdigestByFileCache().computeIfAbsent(potentialFile, f -> {
 					try {
 						return FileUtils.checksumCRC32(f);
 					} catch (final IOException e) {
 						throw new RuntimeException("Can't read " + f.getPath(), e);
 					}
 				});
-				final long sourceFileDigest = digestByFile.computeIfAbsent(file, f -> {
+				final long sourceFileDigest = digestByFileCache.computeIfAbsent(file, f -> {
 					try {
 						return FileUtils.checksumCRC32(f);
 					} catch (final IOException e) {
@@ -105,7 +105,7 @@ public class FileEntry implements TargetedFileEntries {
 					return;
 				}
 			}
-			copiesByDestination.put(destination, new CopyFileReference(copy));
+			copiesByDestination.put(destination, new CopiedFileReference(copy));
 			updateStatus();
 		}, () -> {
 			if (copiesByDestination.containsKey(destination)) {
@@ -150,11 +150,11 @@ public class FileEntry implements TargetedFileEntries {
 		return relativePath;
 	}
 
-	private class CopyFileReference {
+	private class CopiedFileReference {
 		private final File copy;
 		private final boolean sameSize;
 
-		CopyFileReference(final File copy) {
+		CopiedFileReference(final File copy) {
 			this.copy = Objects.requireNonNull(copy, "\"copy\" can't to be null");
 			sameSize = file.length() == copy.length();
 		}
@@ -170,7 +170,7 @@ public class FileEntry implements TargetedFileEntries {
 
 	}
 
-	private static final Predicate<CopyFileReference> isSameSize = c -> c.sameSize;
+	private static final Predicate<CopiedFileReference> isSameSize = c -> c.sameSize;
 
 	private void updateStatus() {
 		if (lastCopyError != null) {
@@ -316,7 +316,7 @@ public class FileEntry implements TargetedFileEntries {
 		final Stream<Entry> sourceEntry = Stream.of(new Entry(MainApp.messages.getString("tableContextSourceFile"), file));
 
 		final Stream<Entry> destEntries = destsList.stream().filter(copiesByDestination::containsKey).map(dest -> {
-			final CopyFileReference ref = copiesByDestination.get(dest);
+			final CopiedFileReference ref = copiesByDestination.get(dest);
 			return new Entry(String.format(messageDest, dest.rootPath.getPath()), ref.copy, ref.sameSize == false);
 		});
 

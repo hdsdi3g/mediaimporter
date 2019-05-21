@@ -14,7 +14,7 @@
  * Copyright (C) hdsdi3g for hd3g.tv 2019
  *
 */
-package tv.hd3g.mediaimporter;
+package tv.hd3g.mediaimporter.ui;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
@@ -39,20 +39,19 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
+import tv.hd3g.mediaimporter.MainApp;
 
 @Plugin(name = "DialogAppender", category = "Core", elementType = "appender", printObject = true)
 public class DialogAppender extends AbstractAppender {
 
-	private final ResourceBundle messages;
+	private final ResourceBundle messages = MainApp.messages;
 
 	protected DialogAppender(final String name, final Filter filter, final Layout<? extends Serializable> layout, final boolean ignoreExceptions) {
 		super(name, filter, layout, ignoreExceptions);
-		messages = ResourceBundle.getBundle(getClass().getPackage().getName() + ".messages");
 	}
 
 	protected DialogAppender(final String name, final Filter filter, final Layout<? extends Serializable> layout) {
 		super(name, filter, layout);
-		messages = ResourceBundle.getBundle(getClass().getPackage().getName() + ".messages");
 	}
 
 	@Override

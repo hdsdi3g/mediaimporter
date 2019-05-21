@@ -37,12 +37,12 @@ import tv.hd3g.mediaimporter.tools.FileSanity;
 public class SourceEntry extends BaseSourceDestEntry {
 
 	private final FileSanity fileSanity;
-	private final Map<File, Long> digestByFile;
+	private final Map<File, Long> digestByFileCache;
 
-	public SourceEntry(final File rootPath, final FileSanity fileSanity, final Map<File, Long> digestByFile) {
+	public SourceEntry(final File rootPath, final FileSanity fileSanity, final Map<File, Long> digestByFileCache) {
 		super(rootPath);
 		this.fileSanity = fileSanity;
-		this.digestByFile = Objects.requireNonNull(digestByFile, "\"digestByFile\" can't to be null");
+		this.digestByFileCache = Objects.requireNonNull(digestByFileCache, "\"digestByFile\" can't to be null");
 
 	}
 
@@ -78,7 +78,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 			}
 			return fileSanity.isFileIsValid(founded);
 		}).sorted().peek(founded -> actualFileSet.add(founded)).map(founded -> {
-			final FileEntry newFileEntry = new FileEntry(this, founded, driveSN, destsList, digestByFile);
+			final FileEntry newFileEntry = new FileEntry(this, founded, driveSN, destsList, digestByFileCache);
 			fileList.add(newFileEntry);
 			return newFileEntry;
 		}).collect(Collectors.toUnmodifiableList());
