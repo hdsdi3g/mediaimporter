@@ -34,11 +34,11 @@ import tv.hd3g.processlauncher.tool.ExecutableTool;
 import tv.hd3g.processlauncher.tool.RunningTool;
 import tv.hd3g.processlauncher.tool.ToolRunner;
 
-public class WindowsDriveProbe implements DriveProbe {
+public class DriveProbeWindows implements DriveProbe {
 
 	private final ScheduledExecutorService scheduledExecutor;
 
-	public WindowsDriveProbe() {
+	public DriveProbeWindows() {
 		scheduledExecutor = Executors.newScheduledThreadPool(1);
 	}
 

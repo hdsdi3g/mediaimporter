@@ -31,6 +31,6 @@ public interface FileSanity {
 			throw new UnsupportedOperationException("Linux is not managed");
 		}
 
-		return new WindowsFileSanity();
+		return new FileSanityWindows();
 	}
 }

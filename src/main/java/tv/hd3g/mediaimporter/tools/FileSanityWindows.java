@@ -25,7 +25,7 @@ import java.nio.file.attribute.DosFileAttributes;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class WindowsFileSanity implements FileSanity {
+public class FileSanityWindows implements FileSanity {
 
 	private static Logger log = LogManager.getLogger();
 

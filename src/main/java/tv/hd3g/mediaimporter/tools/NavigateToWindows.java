@@ -26,7 +26,7 @@ import tv.hd3g.processlauncher.cmdline.Parameters;
 import tv.hd3g.processlauncher.tool.ExecutableTool;
 import tv.hd3g.processlauncher.tool.ToolRunner;
 
-public class WindowsNavigateTo implements NavigateTo {
+public class NavigateToWindows implements NavigateTo {
 	private static Logger log = LogManager.getLogger();
 
 	@Override

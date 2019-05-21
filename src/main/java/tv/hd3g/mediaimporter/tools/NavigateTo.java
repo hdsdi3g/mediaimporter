@@ -33,6 +33,6 @@ public interface NavigateTo {
 			throw new UnsupportedOperationException("Linux is not managed");
 		}
 
-		return new WindowsNavigateTo();
+		return new NavigateToWindows();
 	}
 }

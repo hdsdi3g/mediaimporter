@@ -39,6 +39,6 @@ public interface DriveProbe {
 			throw new UnsupportedOperationException("Linux is not managed");
 		}
 
-		return new WindowsDriveProbe();
+		return new DriveProbeWindows();
 	}
 }
