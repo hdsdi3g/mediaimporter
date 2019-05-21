@@ -49,7 +49,11 @@ public class NavigateToWindows implements NavigateTo {
 		@Override
 		public Parameters getReadyToRunParameters() {
 			final Parameters parameters = new Parameters();
-			parameters.addParameters("/c", "start explorer /separate,/select,\"" + selectedTarget.getPath() + "\"");
+			if (selectedTarget.isFile()) {
+				parameters.addParameters("/c", "start explorer /separate,/select,\"" + selectedTarget.getPath() + "\"");
+			} else {
+				parameters.addParameters("/c", "start explorer /separate,\"" + selectedTarget.getPath() + "\"");
+			}
 			return parameters;
 		}
 
