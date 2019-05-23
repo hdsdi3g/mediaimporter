@@ -30,6 +30,6 @@ public class DriveProbeTest extends TestCase {
 		Assert.assertNotNull(probe);
 
 		final ToolRunner runner = new ToolRunner(new ExecutableFinder(), 1);
-		System.out.println(probe.getSNByMountedDrive(runner));
+		System.out.println(probe.getSNByMountedDrive(runner).get());
 	}
 }
