@@ -63,9 +63,6 @@ public class SourceEntry extends BaseSourceDestEntry {
 			 */
 			fileList.clear();
 			fileList.addAll(actualFileEntrySet);
-			fileList.sort((l, r) -> {
-				return l.getFile().compareTo(r.getFile());
-			});
 		}
 
 		final Set<File> actualFileSet = fileList.stream().map(FileEntry::getFile).distinct().collect(Collectors.toSet());
@@ -75,9 +72,11 @@ public class SourceEntry extends BaseSourceDestEntry {
 				return false;
 			} else if (actualFileSet.contains(founded)) {
 				return false;
+			} else if (founded.length() == 0) {
+				return false;
 			}
 			return fileSanity.isFileIsValid(founded);
-		}).sorted().peek(founded -> actualFileSet.add(founded)).map(founded -> {
+		}).peek(actualFileSet::add).map(founded -> {
 			final FileEntry newFileEntry = new FileEntry(this, founded, driveSN, destsList, digestByFileCache);
 			fileList.add(newFileEntry);
 			return newFileEntry;

@@ -157,6 +157,8 @@ public class MainApp extends Application {
 			// image_tasks = new Image(getClass().getResourceAsStream("tasks.png"), 10, 10, false, false);
 
 			new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity, digestByFileCache);
+			// TODO history: add stats
+			// TODO perf test
 
 			stage.setScene(scene);
 			stage.setTitle("Media importer");
@@ -319,8 +321,6 @@ public class MainApp extends Application {
 
 				digestByFileCache.clear();
 
-				// TODO Test media change
-
 				sourcesList.forEach(entry -> {
 					final SimpleStringProperty driveSN = new SimpleStringProperty();
 					if (lastSNDrivesProbeResult.isNotNull().get()) {
@@ -343,6 +343,10 @@ public class MainApp extends Application {
 								});
 							});
 						}
+
+						fileList.sort((l, r) -> {
+							return l.getFile().compareTo(r.getFile());
+						});
 					} catch (final IOException e) {
 						MainApp.log4javaFx.error("Can't scan " + entry, e);
 					}
@@ -504,7 +508,11 @@ public class MainApp extends Application {
 		final String counter = String.format(messages.getString("labelProgressProcess"), filesCopied + 1, totalFiles, MainApp.byteCountToDisplaySizeWithPrecision(datasCopiedBytes), MainApp.byteCountToDisplaySizeWithPrecision(totalDatasBytes));
 		mainPanel.getLblProgressionCounter().setText(counter);
 
-		mainPanel.getLblEta().setText("ETA: " + DurationFormatUtils.formatDuration(etaMsec, "HH:mm:ss"));
+		if (etaMsec < 1) {
+			mainPanel.getLblEta().setText("ETA: XX:XX:XX");
+		} else {
+			mainPanel.getLblEta().setText("ETA: " + DurationFormatUtils.formatDuration(etaMsec, "HH:mm:ss"));
+		}
 
 		final String speedCopy = String.format(messages.getString("labelProgressSpeed"), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(meanCopySpeedBytesPerSec)), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(instantCopySpeedBytesPerSec)));
 		mainPanel.getLblSpeedCopy().setText(speedCopy);

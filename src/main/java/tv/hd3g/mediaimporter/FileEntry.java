@@ -215,7 +215,14 @@ public class FileEntry implements TargetedFileEntries {
 		}, () -> {
 			final String readed = MainApp.byteCountToDisplaySizeWithPrecision(readedBytes);
 			final String speed = MainApp.byteCountToDisplaySizeWithPrecision(meanSpeed);
-			final String eta = DurationFormatUtils.formatDuration(currentEtaMsec, "HH:mm:ss");
+
+			final String eta;
+			if (currentEtaMsec < 1) {
+				eta = "XX:XX:XX";
+			} else {
+				eta = DurationFormatUtils.formatDuration(currentEtaMsec, "HH:mm:ss");
+			}
+
 			status.set(String.format(MainApp.messages.getString("fileEntryStatusProgress"), readed, speed, eta));
 		});
 	}
