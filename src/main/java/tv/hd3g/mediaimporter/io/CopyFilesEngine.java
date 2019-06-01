@@ -17,6 +17,7 @@
 package tv.hd3g.mediaimporter.io;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -41,10 +42,13 @@ public class CopyFilesEngine {
 	private final List<CopyOperation> copyList;
 	final List<DestinationEntry> allDestinations;
 	private final ThreadPoolExecutor mainExecutor;
+	private final ThreadPoolExecutor writeExecutor;
 	private CompletableFuture<?> allTasks;
 
 	private final long dataSizeToCopyBytes;
 	private final GlobalCopyStat globalCopyStat;
+
+	private volatile boolean wantToStop;
 
 	/**
 	 * Not reusable
@@ -52,9 +56,28 @@ public class CopyFilesEngine {
 	public CopyFilesEngine(final List<FileEntry> toCopy, final List<DestinationEntry> allDestinations, final MainApp ui) {
 		this.allDestinations = allDestinations;
 
+		mainExecutor = new ThreadPoolExecutor(1, 1, 10l, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
+			final Thread t = new Thread(r);
+			t.setDaemon(true);
+			t.setName("CopyOperation");
+			return t;
+		});
+
+		final AtomicLong counter = new AtomicLong();
+		final int size = Math.min(allDestinations.size(), Runtime.getRuntime().availableProcessors());
+		writeExecutor = new ThreadPoolExecutor(size, size, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
+			final Thread t = new Thread(r);
+			t.setDaemon(true);
+			t.setName("Write #" + counter.getAndIncrement());
+			return t;
+		});
+
+		// final int baseBufferSize = (int) Files.getFileStore(source).getBlockSize();
+		final ByteBuffer buffer = ByteBuffer.allocateDirect(256 * 256 * 256 * 4);// 67 108 864 bytes
+
 		copyList = toCopy.stream().map(fileEntry -> {
 			try {
-				return new CopyOperation(fileEntry);
+				return new CopyOperation(fileEntry, buffer, writeExecutor);
 			} catch (final IOException e) {
 				throw new RuntimeException("Can't prepare copy operation with " + fileEntry, e);
 			}
@@ -62,14 +85,6 @@ public class CopyFilesEngine {
 
 		globalCopyStat = new GlobalCopyStat(copyList.stream().map(CopyOperation::getCopyStat).collect(Collectors.toUnmodifiableList()), ui);
 
-		final AtomicLong counter = new AtomicLong();
-		mainExecutor = new ThreadPoolExecutor(1, 1, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(toCopy.size()), r -> {
-			final Thread t = new Thread(r);
-			// t.setPriority(Thread.MIN_PRIORITY);
-			t.setDaemon(true);
-			t.setName("CopyOperation #" + counter.getAndIncrement());
-			return t;
-		});
 		allTasks = CompletableFuture.failedFuture(new NullPointerException("Never started"));
 
 		dataSizeToCopyBytes = copyList.stream().mapToLong(CopyOperation::getSourceLength).sum();
@@ -97,13 +112,9 @@ public class CopyFilesEngine {
 	public CompletableFuture<?> asyncStart() {
 		log.info("Put " + copyList.size() + " item(s) in queue for copy");
 
-		final CompletableFuture<?>[] allOperations = new CompletableFuture<?>[copyList.size()];
-
-		copyList.stream().map(copyOperation -> {
-			return CompletableFuture.runAsync(copyOperation, mainExecutor);
-		}).collect(Collectors.toUnmodifiableList()).toArray(allOperations);
-
-		allTasks = CompletableFuture.allOf(allOperations);
+		allTasks = CompletableFuture.runAsync(() -> {
+			copyList.stream().filter(cL -> wantToStop == false).forEach(CopyOperation::run);
+		}, mainExecutor);
 
 		final ScheduledFuture<?> regularUIUpdaterFuture = Executors.newScheduledThreadPool(1, r -> {
 			final Thread t = new Thread(r);
@@ -114,7 +125,15 @@ public class CopyFilesEngine {
 			globalCopyStat.refresh();
 		}, 300, 300, TimeUnit.MILLISECONDS);
 
-		allTasks.whenCompleteAsync((ok, error) -> regularUIUpdaterFuture.cancel(false));
+		allTasks.whenCompleteAsync((ok, error) -> {
+			regularUIUpdaterFuture.cancel(false);
+			if (error == null) {
+				final long duration = globalCopyStat.getEndDate() - globalCopyStat.getSetStartDate();
+				globalCopyStat.getSlotList().forEach(slot -> {
+					slot.addLogHistoryOnEndAllCopies(dataSizeToCopyBytes, duration);
+				});
+			}
+		});
 		return allTasks;
 	}
 
@@ -122,8 +141,11 @@ public class CopyFilesEngine {
 	 * Non-blocking
 	 */
 	public void asyncStop(final Runnable onDone) {
+		wantToStop = true;
+
 		if (mainExecutor.getActiveCount() == 0) {
 			mainExecutor.shutdown();
+			writeExecutor.shutdown();
 			onDone.run();
 			return;
 		}
@@ -131,10 +153,15 @@ public class CopyFilesEngine {
 		allTasks.completeExceptionally(new Exception("Manual stop operation"));
 
 		mainExecutor.getQueue().clear();
+		writeExecutor.getQueue().clear();
+
 		copyList.forEach(copyOperation -> {
 			copyOperation.switchStop();
 		});
-		CompletableFuture.runAsync(onDone, mainExecutor).thenAcceptAsync(v -> mainExecutor.shutdown());
+		CompletableFuture.runAsync(onDone, mainExecutor).thenAcceptAsync(v -> {
+			mainExecutor.shutdown();
+			writeExecutor.shutdown();
+		});
 	}
 
 }

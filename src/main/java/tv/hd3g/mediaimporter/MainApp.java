@@ -157,8 +157,6 @@ public class MainApp extends Application {
 			// image_tasks = new Image(getClass().getResourceAsStream("tasks.png"), 10, 10, false, false);
 
 			new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity, digestByFileCache);
-			// TODO history: add stats
-			// TODO perf test
 
 			stage.setScene(scene);
 			stage.setTitle("Media importer");
@@ -229,7 +227,7 @@ public class MainApp extends Application {
 			destsList.forEach(DestinationEntry::updateSlotsContent);
 
 			mainPanel.getTableDestinationsColAvailable().setCellFactory(col -> new TableCellFileSize<>());
-			mainPanel.getTableDestinationsColSpeed().setCellFactory(col -> new TableCellFileSize<>());
+			mainPanel.getTableDestinationsColSpeed().setCellFactory(col -> new TableCellFileSize<>("/sec"));
 
 			destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
 				while (change.next()) {
@@ -502,7 +500,7 @@ public class MainApp extends Application {
 		}
 	}
 
-	public void updateProgress(final double progressRate, final int filesCopied, final int totalFiles, final long datasCopiedBytes, final long totalDatasBytes, final long etaMsec, final long meanCopySpeedBytesPerSec, final long instantCopySpeedBytesPerSec) {
+	public void updateProgress(final double progressRate, final int filesCopied, final int totalFiles, final long datasCopiedBytes, final long totalDatasBytes, final long startTimeMsec, final long etaMsec, final long meanCopySpeedBytesPerSec, final long instantCopySpeedBytesPerSec) {
 		mainPanel.getProgressBar().setProgress(progressRate);
 
 		final String counter = String.format(messages.getString("labelProgressProcess"), filesCopied + 1, totalFiles, MainApp.byteCountToDisplaySizeWithPrecision(datasCopiedBytes), MainApp.byteCountToDisplaySizeWithPrecision(totalDatasBytes));
@@ -514,7 +512,14 @@ public class MainApp extends Application {
 			mainPanel.getLblEta().setText("ETA: " + DurationFormatUtils.formatDuration(etaMsec, "HH:mm:ss"));
 		}
 
-		final String speedCopy = String.format(messages.getString("labelProgressSpeed"), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(meanCopySpeedBytesPerSec)), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(instantCopySpeedBytesPerSec)));
+		final String since;
+		if (startTimeMsec < 1) {
+			since = "XX:XX:XX";
+		} else {
+			since = DurationFormatUtils.formatDuration(startTimeMsec, "HH:mm:ss");
+		}
+
+		final String speedCopy = String.format(messages.getString("labelProgressSpeed"), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(meanCopySpeedBytesPerSec)), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(instantCopySpeedBytesPerSec)), since);
 		mainPanel.getLblSpeedCopy().setText(speedCopy);
 	}
 

@@ -45,11 +45,15 @@ public class GlobalCopyStat {
 		slotList = items.stream().map(CopyStat::getReferer).map(CopyOperation::getDestinationListToCopy).flatMap(slotList -> slotList.stream()).distinct().collect(Collectors.toUnmodifiableList());
 	}
 
-	private synchronized long getSetStartDate() {
+	synchronized long getSetStartDate() {
 		if (startDate == -1) {
 			return items.stream().filter(CopyStat::isStarted).mapToLong(CopyStat::getStartDateMsec).min().orElse(-1);
 		}
 		return startDate;
+	}
+
+	synchronized long getEndDate() {
+		return items.stream().filter(CopyStat::isStarted).mapToLong(CopyStat::getEndDateMsec).max().orElse(-1);
 	}
 
 	void refresh() {
@@ -73,9 +77,14 @@ public class GlobalCopyStat {
 			slotList.forEach(dest -> {
 				dest.updateWriteSpeed();
 			});
-			ui.updateProgress(progressRate, filesCopied, totalFiles, datasCopiedBytes, totalDatasBytes, etaMsec, Math.round(meanCopySpeedBytesPerSec), instantCopySpeedBytesPerSec);
-		});
 
+			final long startTimeMsec = System.currentTimeMillis() - getSetStartDate();
+			ui.updateProgress(progressRate, filesCopied, totalFiles, datasCopiedBytes, totalDatasBytes, startTimeMsec, etaMsec, Math.round(meanCopySpeedBytesPerSec), instantCopySpeedBytesPerSec);
+		});
+	}
+
+	List<DestinationEntrySlot> getSlotList() {
+		return slotList;
 	}
 
 }

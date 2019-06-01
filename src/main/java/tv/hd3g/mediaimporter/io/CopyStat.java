@@ -30,6 +30,7 @@ public class CopyStat {
 	private long startDateMsec;
 	private long lastLoopDateMsec;
 	private long totalReadedBytes;
+	private long endDateMsec;
 
 	private long lastReadWriteLoopReadedBytes;
 	private long lastReadWriteLoopTimeNanoSec;
@@ -40,6 +41,7 @@ public class CopyStat {
 		this.referer = referer;
 		this.sourceFileSizeBytes = sourceFileSizeBytes;
 		startDateMsec = -1;
+		endDateMsec = -1;
 	}
 
 	FileEntry getFileEntry() {
@@ -59,6 +61,10 @@ public class CopyStat {
 
 	synchronized void onStart() {
 		startDateMsec = System.currentTimeMillis();
+	}
+
+	synchronized void onEnd() {
+		endDateMsec = System.currentTimeMillis();
 	}
 
 	void onWrite(final DestinationEntrySlot currentSlot, final long datasBytes, final long durationNanoSec) {
@@ -93,6 +99,10 @@ public class CopyStat {
 
 	public synchronized long getStartDateMsec() {
 		return startDateMsec;
+	}
+
+	public synchronized long getEndDateMsec() {
+		return endDateMsec;
 	}
 
 	public synchronized long getLastUpdateDateMsec() {

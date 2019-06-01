@@ -21,8 +21,15 @@ import tv.hd3g.mediaimporter.MainApp;
 
 public class TableCellFileSize<T> extends TableCell<T, Number> {
 
-	public TableCellFileSize() {
+	private final String unit;
+
+	public TableCellFileSize(final String unit) {
 		super();
+		this.unit = unit;
+	}
+
+	public TableCellFileSize() {
+		this(null);
 	}
 
 	@Override
@@ -33,7 +40,11 @@ public class TableCellFileSize<T> extends TableCell<T, Number> {
 		} else if (item.longValue() == 0l) {
 			setText(null);
 		} else {
-			setText(MainApp.byteCountToDisplaySizeWithPrecision(item.longValue()));
+			if (unit == null) {
+				setText(MainApp.byteCountToDisplaySizeWithPrecision(item.longValue()));
+			} else {
+				setText(MainApp.byteCountToDisplaySizeWithPrecision(item.longValue()) + " " + unit);
+			}
 		}
 	}
 }

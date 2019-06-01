@@ -29,6 +29,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -146,6 +147,25 @@ public class DestinationEntrySlot {
 
 	public void addLogHistoryOnEndCopy(final File dest) {
 		writeHistoryLog("Copy done" + System.lineSeparator(), System.currentTimeMillis());
+	}
+
+	public void addLogHistoryOnEndAllCopies(final long dataSize, final long duration) {
+		if (dataSize < 1 || duration < 1) {
+			return;
+		}
+
+		final StringBuilder sb = new StringBuilder();
+		sb.append("Total copy \"");
+		sb.append(dataSize);
+		sb.append(" bytes (");
+		sb.append(MainApp.byteCountToDisplaySizeWithPrecision(dataSize));
+		sb.append(") in ");
+		sb.append(DurationFormatUtils.formatDuration(duration, "HH:mm:ss"));
+		sb.append(" (");
+		sb.append(MainApp.byteCountToDisplaySizeWithPrecision(Math.round(dataSize / duration * 1000d)));
+		sb.append("/sec)");
+
+		writeHistoryLog(sb.toString(), System.currentTimeMillis());
 	}
 
 }
