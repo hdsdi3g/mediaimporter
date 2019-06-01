@@ -73,11 +73,15 @@ public class CopyFilesEngine {
 		});
 
 		// final int baseBufferSize = (int) Files.getFileStore(source).getBlockSize();
-		final ByteBuffer buffer = ByteBuffer.allocateDirect(256 * 256 * 256 * 4);// 67 108 864 bytes
+		/**
+		 * 67 108 864 bytes
+		 */
+		final ByteBuffer bufferA = ByteBuffer.allocateDirect(256 * 256 * 256 * 4);
+		final ByteBuffer bufferB = ByteBuffer.allocateDirect(256 * 256 * 256 * 4);
 
 		copyList = toCopy.stream().map(fileEntry -> {
 			try {
-				return new CopyOperation(fileEntry, buffer, writeExecutor);
+				return new CopyOperation(fileEntry, bufferA, bufferB, writeExecutor);
 			} catch (final IOException e) {
 				throw new RuntimeException("Can't prepare copy operation with " + fileEntry, e);
 			}

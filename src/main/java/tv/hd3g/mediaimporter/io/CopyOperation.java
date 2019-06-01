@@ -23,6 +23,9 @@ import java.nio.channels.FileChannel;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,14 +56,15 @@ public class CopyOperation {
 	private final Path source;
 	private final FileEntry entryToCopy;
 	private final List<DestinationEntrySlot> destinationListToCopy;
-	private final ByteBuffer buffer;
+	private final List<ByteBuffer> bufferPool;
 	private final Executor writeExecutor;
 	private volatile boolean wantToStop;
 	private final CopyStat copyStat;
 
-	CopyOperation(final FileEntry entryToCopy, final ByteBuffer buffer, final Executor writeExecutor) throws IOException {
+	CopyOperation(final FileEntry entryToCopy, final ByteBuffer bufferA, final ByteBuffer bufferB, final Executor writeExecutor) throws IOException {
 		this.entryToCopy = entryToCopy;
-		this.buffer = buffer;
+		bufferPool = new ArrayList<>(Arrays.asList(bufferA, bufferB));
+
 		this.writeExecutor = writeExecutor;
 		wantToStop = false;
 		source = entryToCopy.getFile().toPath();
@@ -78,7 +82,6 @@ public class CopyOperation {
 		}
 		copyStat.onStart();
 		log.info("Start to copy " + entryToCopy + " (" + MainApp.byteCountToDisplaySizeWithPrecision(entryToCopy.getFile().length()) + ") to " + destinationListToCopy.size() + " destination(s)");
-		buffer.clear();
 
 		final Map<Path, DestinationEntrySlot> slotsToCopyByPath = destinationListToCopy.stream().collect(Collectors.toUnmodifiableMap(slot -> {
 			final String relativePath = entryToCopy.getRelativePath();
@@ -134,30 +137,22 @@ public class CopyOperation {
 			final List<Entry<FileChannel, DestinationEntrySlot>> allFileChannelSlots = slotByFileChannel.entrySet().stream().collect(Collectors.toUnmodifiableList());
 
 			long lastLoopDateNanoSec = System.nanoTime();
-			while (sourceChannel.read(buffer) > 0) {
+
+			ByteBuffer currentBuffer = bufferPool.get(0);
+			currentBuffer.clear();
+
+			List<CompletableFuture<?>> writers = Collections.emptyList();
+			while (sourceChannel.read(currentBuffer) > 0) {
 				if (wantToStop) {
 					return;
 				}
-				buffer.flip();
-				copyStat.onReadWriteLoop(buffer.remaining(), System.nanoTime() - lastLoopDateNanoSec);
+				currentBuffer.flip();
+				copyStat.onReadWriteLoop(currentBuffer.remaining(), System.nanoTime() - lastLoopDateNanoSec);
 
 				/**
-				 * Parallel writes
+				 * Wait to ends writes
 				 */
-				allFileChannelSlots.stream().map(entry -> {
-					return CompletableFuture.runAsync(() -> {
-						if (wantToStop) {
-							return;
-						}
-						try {
-							final long timeBeforeWrite = System.nanoTime();
-							final int sizeWrited = entry.getKey().write(buffer.asReadOnlyBuffer());
-							copyStat.onWrite(entry.getValue(), sizeWrited, System.nanoTime() - timeBeforeWrite);
-						} catch (final IOException e) {
-							throw new RuntimeException(e);
-						}
-					}, writeExecutor);
-				}).collect(Collectors.toUnmodifiableList()).forEach(cf -> {
+				writers.forEach(cf -> {
 					try {
 						cf.get();
 					} catch (InterruptedException | ExecutionException e) {
@@ -165,7 +160,29 @@ public class CopyOperation {
 					}
 				});
 
-				buffer.clear();
+				final ByteBuffer currentWriteBuffer = currentBuffer;
+				/**
+				 * Parallel writes
+				 */
+				writers = allFileChannelSlots.stream().map(entry -> {
+					return CompletableFuture.runAsync(() -> {
+						if (wantToStop) {
+							return;
+						}
+						try {
+							final long timeBeforeWrite = System.nanoTime();
+							final int sizeWrited = entry.getKey().write(currentWriteBuffer.asReadOnlyBuffer());
+							copyStat.onWrite(entry.getValue(), sizeWrited, System.nanoTime() - timeBeforeWrite);
+						} catch (final IOException e) {
+							throw new RuntimeException(e);
+						}
+					}, writeExecutor);
+				}).collect(Collectors.toUnmodifiableList());
+
+				Collections.reverse(bufferPool);
+				currentBuffer = bufferPool.get(0);
+				currentBuffer.clear();
+
 				lastLoopDateNanoSec = System.nanoTime();
 			}
 
