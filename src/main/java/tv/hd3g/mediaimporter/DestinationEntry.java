@@ -53,6 +53,7 @@ public class DestinationEntry extends BaseSourceDestEntry {
 
 	public DestinationEntry(final File rootPath) {
 		super(rootPath);
+		updateColsDriveType();
 		availableSpace = new SimpleLongProperty(rootPath.getFreeSpace());
 		writeSpeed = new SimpleLongProperty(0);
 		slots = FXCollections.observableList(new ArrayList<>());

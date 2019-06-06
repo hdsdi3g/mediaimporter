@@ -43,7 +43,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 		super(rootPath);
 		this.fileSanity = fileSanity;
 		this.digestByFileCache = Objects.requireNonNull(digestByFileCache, "\"digestByFile\" can't to be null");
-
+		updateColsDriveType();
 	}
 
 	public static Callback<CellDataFeatures<SourceEntry, File>, ObservableValue<File>> getColPathFactory() {
@@ -56,6 +56,8 @@ public class SourceEntry extends BaseSourceDestEntry {
 	 * @return new file entries.
 	 */
 	public List<FileEntry> scanSource(final ObservableList<FileEntry> fileList, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList) throws IOException {
+		updateColsDriveType();
+
 		final Set<FileEntry> actualFileEntrySet = fileList.stream().distinct().collect(Collectors.toSet());
 		if (fileList.size() != actualFileEntrySet.size()) {
 			/**

@@ -17,6 +17,7 @@
 package tv.hd3g.mediaimporter.io;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -78,6 +79,7 @@ public class CopyOperation {
 
 	public void run() {
 		if (destinationListToCopy.isEmpty()) {
+			log.error("No destinations to copy for " + entryToCopy);
 			return;
 		}
 		copyStat.onStart();
@@ -186,9 +188,21 @@ public class CopyOperation {
 				lastLoopDateNanoSec = System.nanoTime();
 			}
 
+			/**
+			 * Wait to the last ends writes
+			 */
+			writers.forEach(cf -> {
+				try {
+					cf.get();
+				} catch (InterruptedException | ExecutionException e) {
+					throw new RuntimeException(e);
+				}
+			});
+
 			/*for (final FileChannel destinationChannel : destinationChannels.keySet()) {
 				destinationChannel.force(true);
 			}*/
+
 		} catch (final IOException e) {
 			log.error("Can't process copy with " + source, e);
 			copyStat.setLastException(e);
@@ -203,6 +217,7 @@ public class CopyOperation {
 			log.warn("Generic error for " + source, e);
 		} finally {
 			copyStat.onEnd();
+
 			for (final Map.Entry<FileChannel, Path> entry : pathByFileChannel.entrySet()) {
 				try {
 					entry.getKey().close();
@@ -217,6 +232,22 @@ public class CopyOperation {
 					copyStat.setLastException(e);
 				}
 			}
+		}
+
+		try {
+			final long sourceSize = entryToCopy.getFile().length();
+			for (final Map.Entry<FileChannel, Path> entry : pathByFileChannel.entrySet()) {
+				final File expectedFile = pathByFileChannel.get(entry.getKey()).toFile();
+				if (expectedFile.exists() == false) {
+					throw new FileNotFoundException("Expected copied file: " + expectedFile.getAbsolutePath());
+				}
+				if (sourceSize != expectedFile.length()) {
+					throw new IOException("Invalid size for copied file: " + expectedFile.getAbsolutePath() + " (" + expectedFile.length() + " instead of " + sourceSize + ")");
+				}
+			}
+		} catch (final IOException e) {
+			log.error("Invalid copied file", e);
+			copyStat.setLastException((IOException) e.getCause());
 		}
 
 		for (final Map.Entry<FileChannel, DestinationEntrySlot> entry : slotByFileChannel.entrySet()) {

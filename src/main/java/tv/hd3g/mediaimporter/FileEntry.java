@@ -218,7 +218,7 @@ public class FileEntry implements TargetedFileEntries {
 
 			final String eta;
 			if (currentEtaMsec < 1) {
-				eta = "XX:XX:XX";
+				eta = "00:00:00";
 			} else {
 				eta = DurationFormatUtils.formatDuration(currentEtaMsec, "HH:mm:ss");
 			}

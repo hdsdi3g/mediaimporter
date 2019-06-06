@@ -39,6 +39,10 @@ public class MainPanel {
 	private TableView<SourceEntry> tableSources;
 	@FXML
 	private TableColumn<SourceEntry, File> tableSourcesColPath;
+	@FXML
+	private TableColumn<SourceEntry, String> tableSourcesColDrive;
+	@FXML
+	private TableColumn<SourceEntry, String> tableSourcesColType;
 
 	/**
 	 * Dest zone
@@ -57,6 +61,10 @@ public class MainPanel {
 	private TableColumn<DestinationEntry, Number> tableDestinationsColSpeed;
 	@FXML
 	private TableColumn<DestinationEntry, Number> tableDestinationsColSlots;
+	@FXML
+	private TableColumn<DestinationEntry, String> tableDestinationsColDrive;
+	@FXML
+	private TableColumn<DestinationEntry, String> tableDestinationsColType;
 
 	/**
 	 * File zone
@@ -208,6 +216,22 @@ public class MainPanel {
 
 	public Button getBtnQuit() {
 		return btnQuit;
+	}
+
+	public TableColumn<SourceEntry, String> getTableSourcesColDrive() {
+		return tableSourcesColDrive;
+	}
+
+	public TableColumn<SourceEntry, String> getTableSourcesColType() {
+		return tableSourcesColType;
+	}
+
+	public TableColumn<DestinationEntry, String> getTableDestinationsColDrive() {
+		return tableDestinationsColDrive;
+	}
+
+	public TableColumn<DestinationEntry, String> getTableDestinationsColType() {
+		return tableDestinationsColType;
 	}
 
 }

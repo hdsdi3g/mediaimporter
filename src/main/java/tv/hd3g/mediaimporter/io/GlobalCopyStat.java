@@ -64,7 +64,7 @@ public class GlobalCopyStat {
 		final double meanCopySpeedBytesPerSec = datasCopiedBytes / (double) timeElapsedMsec * 1000d;
 		final Optional<CopyStat> currentCopyStat = items.stream().filter(CopyStat::isStarted).filter(Predicate.not(CopyStat::isDone)).findFirst();
 		final long instantCopySpeedBytesPerSec = currentCopyStat.map(CopyStat::getInstantSpeedBytesPerSec).orElse(0l);
-		final long etaMsec = Math.round((totalDatasBytes - datasCopiedBytes) / meanCopySpeedBytesPerSec * 1000d);
+		final long etaMsec = Math.round((totalDatasBytes - datasCopiedBytes) / meanCopySpeedBytesPerSec * 1000d) + 1000;
 
 		Platform.runLater(() -> {
 			currentCopyStat.ifPresent(copyStat -> {

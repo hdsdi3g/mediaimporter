@@ -134,7 +134,7 @@ public class CopyStat {
 		if (meanSpeed == 0) {
 			return 0;
 		}
-		return Math.round((sourceFileSizeBytes - totalReadedBytes) / meanSpeed * 1000d);
+		return Math.round((sourceFileSizeBytes - totalReadedBytes) / meanSpeed * 1000d) + 1000;
 	}
 
 	public synchronized Optional<IOException> getLastException() {

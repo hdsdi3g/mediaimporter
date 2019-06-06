@@ -185,6 +185,8 @@ public class MainApp extends Application {
 			 */
 			mainPanel.getTableSources().setItems(sourcesList);
 			mainPanel.getTableSourcesColPath().setCellValueFactory(SourceEntry.getColPathFactory());
+			mainPanel.getTableSourcesColDrive().setCellValueFactory(BaseSourceDestEntry.getColDriveFactory());
+			mainPanel.getTableSourcesColType().setCellValueFactory(BaseSourceDestEntry.getColTypeFactory());
 
 			mainPanel.getBtnAddSourceDir().setOnAction(event -> {
 				event.consume();
@@ -224,6 +226,9 @@ public class MainApp extends Application {
 			mainPanel.getTableDestinationsColAvailable().setCellValueFactory(DestinationEntry.getColAvailableFactory());
 			mainPanel.getTableDestinationsColSpeed().setCellValueFactory(DestinationEntry.getColAvailableSpeed());
 			mainPanel.getTableDestinationsColSlots().setCellValueFactory(DestinationEntry.getColAvailableSlots());
+			mainPanel.getTableDestinationsColDrive().setCellValueFactory(BaseSourceDestEntry.getColDriveFactory());
+			mainPanel.getTableDestinationsColType().setCellValueFactory(BaseSourceDestEntry.getColTypeFactory());
+
 			destsList.forEach(DestinationEntry::updateSlotsContent);
 
 			mainPanel.getTableDestinationsColAvailable().setCellFactory(col -> new TableCellFileSize<>());
@@ -507,14 +512,14 @@ public class MainApp extends Application {
 		mainPanel.getLblProgressionCounter().setText(counter);
 
 		if (etaMsec < 1) {
-			mainPanel.getLblEta().setText("ETA: XX:XX:XX");
+			mainPanel.getLblEta().setText("ETA: 00:00:00");
 		} else {
 			mainPanel.getLblEta().setText("ETA: " + DurationFormatUtils.formatDuration(etaMsec, "HH:mm:ss"));
 		}
 
 		final String since;
 		if (startTimeMsec < 1) {
-			since = "XX:XX:XX";
+			since = "00:00:00";
 		} else {
 			since = DurationFormatUtils.formatDuration(startTimeMsec, "HH:mm:ss");
 		}

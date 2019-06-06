@@ -24,15 +24,28 @@ import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import javax.swing.filechooser.FileSystemView;
+
 import org.apache.commons.io.FileUtils;
 
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
+import javafx.scene.control.TableColumn.CellDataFeatures;
+import javafx.util.Callback;
 
 public abstract class BaseSourceDestEntry implements TargetedFileEntries {
+
+	private static final FileSystemView fileSystemView = FileSystemView.getFileSystemView();
+
 	protected final File rootPath;
+	protected final SimpleStringProperty systemDriveName;
+	protected final SimpleStringProperty systemDriveType;
 
 	public BaseSourceDestEntry(final File rootPath) {
 		this.rootPath = Objects.requireNonNull(rootPath, "\"rootPath\" can't to be null");
+		systemDriveName = new SimpleStringProperty();
+		systemDriveType = new SimpleStringProperty();
 	}
 
 	private static Predicate<BaseSourceDestEntry> isStoredOn(final Stream<BaseSourceDestEntry> toCompare) {
@@ -105,4 +118,22 @@ public abstract class BaseSourceDestEntry implements TargetedFileEntries {
 	public File getRootPath() {
 		return rootPath;
 	}
+
+	public void updateColsDriveType() {
+		systemDriveName.set(fileSystemView.getSystemDisplayName(rootPath));
+		systemDriveType.set(fileSystemView.getSystemTypeDescription(rootPath));
+	}
+
+	public static <T extends BaseSourceDestEntry> Callback<CellDataFeatures<T, String>, ObservableValue<String>> getColDriveFactory() {
+		return param -> {
+			return param.getValue().systemDriveName;
+		};
+	}
+
+	public static <T extends BaseSourceDestEntry> Callback<CellDataFeatures<T, String>, ObservableValue<String>> getColTypeFactory() {
+		return param -> {
+			return param.getValue().systemDriveType;
+		};
+	}
+
 }
