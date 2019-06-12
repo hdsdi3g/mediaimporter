@@ -36,6 +36,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -51,13 +52,21 @@ import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.TableRow;
 import javafx.scene.image.Image;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.StrokeType;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextAlignment;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import tv.hd3g.mediaimporter.io.CopyFilesEngine;
@@ -183,20 +192,24 @@ public class MainApp extends Application {
 			/**
 			 * initSourceZone
 			 */
+			final Consumer<File> onAddNewSourceDir = file -> {
+				final SourceEntry toAdd = new SourceEntry(file, fileSanity, digestByFileCache);
+				if (sourcesList.contains(toAdd) == false) {
+					log.info("Add new source directory: " + file);
+					sourcesList.add(toAdd);
+				}
+			};
+
 			mainPanel.getTableSources().setItems(sourcesList);
+			mainPanel.getTableSources().setPlaceholder(createPlaceholder(messages.getString("tableSourcePlaceholder")));
+			setFolderDragAndDrop(mainPanel.getTableSources(), mainPanel.getTableSources().getItems()::isEmpty, onAddNewSourceDir);
 			mainPanel.getTableSourcesColPath().setCellValueFactory(SourceEntry.getColPathFactory());
 			mainPanel.getTableSourcesColDrive().setCellValueFactory(BaseSourceDestEntry.getColDriveFactory());
 			mainPanel.getTableSourcesColType().setCellValueFactory(BaseSourceDestEntry.getColTypeFactory());
 
 			mainPanel.getBtnAddSourceDir().setOnAction(event -> {
 				event.consume();
-				selectDirectory("addSourceDirectory").ifPresent(file -> {
-					final SourceEntry toAdd = new SourceEntry(file, fileSanity, digestByFileCache);
-					if (sourcesList.contains(toAdd) == false) {
-						log.info("Add new source directory: " + file);
-						sourcesList.add(toAdd);
-					}
-				});
+				selectDirectory("addSourceDirectory").ifPresent(onAddNewSourceDir);
 			});
 			sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
 				while (change.next()) {
@@ -221,7 +234,21 @@ public class MainApp extends Application {
 			/**
 			 * initDestZone
 			 */
+			final Consumer<File> onAddNewDestDir = file -> {
+				final DestinationEntry toAdd = new DestinationEntry(file);
+				if (destsList.contains(toAdd) == false) {
+					log.info("Add new dest directory: " + file);
+					toAdd.updateSlotsContent();
+					destsList.add(toAdd);
+					fileList.forEach(fileEntry -> {
+						fileEntry.addDestination(toAdd);
+					});
+				}
+			};
+
 			mainPanel.getTableDestinations().setItems(destsList);
+			mainPanel.getTableDestinations().setPlaceholder(createPlaceholder(messages.getString("tableDestPlaceholder")));
+			setFolderDragAndDrop(mainPanel.getTableDestinations(), mainPanel.getTableDestinations().getItems()::isEmpty, onAddNewDestDir);
 			mainPanel.getTableDestinationsColPath().setCellValueFactory(DestinationEntry.getColPathFactory());
 			mainPanel.getTableDestinationsColAvailable().setCellValueFactory(DestinationEntry.getColAvailableFactory());
 			mainPanel.getTableDestinationsColSpeed().setCellValueFactory(DestinationEntry.getColAvailableSpeed());
@@ -244,17 +271,7 @@ public class MainApp extends Application {
 			});
 			mainPanel.getBtnAddDestinationDir().setOnAction(event -> {
 				event.consume();
-				selectDirectory("addDestDirectory").ifPresent(file -> {
-					final DestinationEntry toAdd = new DestinationEntry(file);
-					if (destsList.contains(toAdd) == false) {
-						log.info("Add new dest directory: " + file);
-						toAdd.updateSlotsContent();
-						destsList.add(toAdd);
-						fileList.forEach(fileEntry -> {
-							fileEntry.addDestination(toAdd);
-						});
-					}
-				});
+				selectDirectory("addDestDirectory").ifPresent(onAddNewDestDir);
 			});
 			mainPanel.getBtnRemoveDestinationDir().setOnAction(event -> {
 				event.consume();
@@ -301,6 +318,7 @@ public class MainApp extends Application {
 			});
 
 			mainPanel.getTableFiles().setItems(fileList);
+			mainPanel.getTableFiles().setPlaceholder(createPlaceholder(messages.getString("tableFilePlaceholder")));
 			mainPanel.getTableFilesColSource().setCellValueFactory(FileEntry.getColSourceFactory());
 			mainPanel.getTableFilesColDriveSN().setCellValueFactory(FileEntry.getColDriveSNFactory());
 			mainPanel.getTableFilesColPath().setCellValueFactory(FileEntry.getColPathFactory());
@@ -473,6 +491,18 @@ public class MainApp extends Application {
 		}
 	}
 
+	private VBox createPlaceholder(final String text) {
+		final VBox placeholder = new VBox(50);
+		placeholder.setAlignment(Pos.CENTER);
+		final Text welcomeLabel = new Text(text);
+		welcomeLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16;");
+		welcomeLabel.setStrokeType(StrokeType.INSIDE);
+		welcomeLabel.setTextAlignment(TextAlignment.CENTER);
+		welcomeLabel.setFill(Color.web("#bbb"));
+		placeholder.getChildren().add(welcomeLabel);
+		return placeholder;
+	}
+
 	@Override
 	public void stop() {
 		log.info("JavaFX GUI Interface is stopped");
@@ -587,6 +617,28 @@ public class MainApp extends Application {
 
 		((Stage) alert.getDialogPane().getScene().getWindow()).getIcons().add(appIcon);
 		alert.showAndWait();
+	}
+
+	private void setFolderDragAndDrop(final Node node, final Supplier<Boolean> isEmpty, final Consumer<File> onDropDirectory) {
+		final String defaultStyle = node.getStyle();
+		node.setOnDragOver(e -> {
+			e.acceptTransferModes(TransferMode.COPY);
+			e.consume();
+		});
+		node.setOnDragEntered(e -> {
+			if (isEmpty.get()) {
+				node.setStyle("-fx-background-color: #ddfbff");
+			}
+			e.consume();
+		});
+		node.setOnDragExited(e -> {
+			node.setStyle(defaultStyle);
+			e.consume();
+		});
+		node.setOnDragDropped(e -> {
+			e.getDragboard().getFiles().stream().filter(File::isDirectory).forEach(onDropDirectory);
+			e.consume();
+		});
 	}
 
 }
