@@ -57,6 +57,7 @@ import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.image.Image;
 import javafx.scene.input.MouseButton;
@@ -145,6 +146,7 @@ public class MainApp extends Application {
 	private MainPanel mainPanel;
 	private Stage stage;
 	private Image appIcon;
+	private ConfigurationStore store;
 
 	@Override
 	public void start(final Stage primaryStage) {
@@ -165,7 +167,26 @@ public class MainApp extends Application {
 			stage.getIcons().add(appIcon);
 			// image_tasks = new Image(getClass().getResourceAsStream("tasks.png"), 10, 10, false, false);
 
-			new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity, digestByFileCache);
+			store = new ConfigurationStore("mediaimporter", sourcesList, destsList, mainPanel.getInputPrefixDirName(), fileSanity, digestByFileCache);
+
+			/**
+			 * Get last preferencies and set to controls
+			 * @see close() for save values
+			 */
+			final Consumer<TableColumn<? extends TargetedFileEntries, ?>> setColWidthFromConfig = c -> {
+				if (c.getId() == null) {
+					return;
+				}
+				store.getConfigDoubleValue(c.getId() + ".width").ifPresent(c::setPrefWidth);
+			};
+			mainPanel.getTableSources().getColumns().forEach(setColWidthFromConfig);
+			mainPanel.getTableDestinations().getColumns().forEach(setColWidthFromConfig);
+			mainPanel.getTableFiles().getColumns().forEach(setColWidthFromConfig);
+
+			store.getConfigDoubleValue("primaryStage.width").ifPresent(stage::setWidth);
+			store.getConfigDoubleValue("primaryStage.height").ifPresent(stage::setHeight);
+			store.getConfigDoubleValue("primaryStage.x").ifPresent(stage::setX);
+			store.getConfigDoubleValue("primaryStage.y").ifPresent(stage::setY);
 
 			stage.setScene(scene);
 			stage.setTitle("Media importer");
@@ -525,6 +546,24 @@ public class MainApp extends Application {
 
 	@Override
 	public void stop() {
+		/**
+		 * Save controls preferencies
+		 */
+		final Consumer<TableColumn<? extends TargetedFileEntries, ?>> getColWidthToConfig = c -> {
+			if (c.getId() == null) {
+				return;
+			}
+			store.setConfigValue(c.getId() + ".width", c.getWidth());
+		};
+		mainPanel.getTableSources().getColumns().forEach(getColWidthToConfig);
+		mainPanel.getTableDestinations().getColumns().forEach(getColWidthToConfig);
+		mainPanel.getTableFiles().getColumns().forEach(getColWidthToConfig);
+
+		store.setConfigValue("primaryStage.width", stage.getWidth());
+		store.setConfigValue("primaryStage.height", stage.getHeight());
+		store.setConfigValue("primaryStage.x", stage.getX());
+		store.setConfigValue("primaryStage.y", stage.getY());
+
 		log.info("JavaFX GUI Interface is stopped");
 		System.exit(0);
 	}

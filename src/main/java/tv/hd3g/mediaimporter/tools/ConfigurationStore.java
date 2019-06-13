@@ -53,8 +53,9 @@ public class ConfigurationStore {
 	private static Logger log = LogManager.getLogger();
 
 	private final String url;
+	private final Properties config;
 
-	public ConfigurationStore(final String name, final ObservableList<SourceEntry> sourcesList, final ObservableList<DestinationEntry> destsList, final TextField inputPrefixDirName, final FileSanity fileSanity, final Map<File, Long> digestByFileCache) {
+	public ConfigurationStore(final String name, final ObservableList<SourceEntry> sourcesList, final ObservableList<DestinationEntry> destsList, final TextField _inputPrefixDirName, final FileSanity fileSanity, final Map<File, Long> digestByFileCache) {
 		Objects.requireNonNull(sourcesList, "\"sourcesList\" can't to be null");
 		Objects.requireNonNull(destsList, "\"destsList\" can't to be null");
 
@@ -66,7 +67,6 @@ public class ConfigurationStore {
 		}
 
 		// sqliteFile.delete();
-		final Properties config;
 
 		url = "jdbc:sqlite:" + sqliteFile.getPath().replaceAll("\\\\", "/");
 		if (sqliteFile.exists() == false) {
@@ -170,20 +170,20 @@ public class ConfigurationStore {
 			}
 		});
 
-		inputPrefixDirName.setText(config.getProperty("inputPrefixDirName", ""));
+		_inputPrefixDirName.setText(config.getProperty("_inputPrefixDirName", ""));
 
-		inputPrefixDirName.addEventFilter(KeyEvent.KEY_RELEASED, event -> {
-			final String textOnEvent = inputPrefixDirName.getText().trim();
+		_inputPrefixDirName.addEventFilter(KeyEvent.KEY_RELEASED, event -> {
+			final String textOnEvent = _inputPrefixDirName.getText().trim();
 			delayedExecutor.schedule(() -> {
 				Platform.runLater(() -> {
-					final String textAfterEvent = inputPrefixDirName.getText().trim();
+					final String textAfterEvent = _inputPrefixDirName.getText().trim();
 					if (textAfterEvent.equals(textOnEvent) == false) {
 						return;
 					}
 					delayedExecutor.execute(() -> {
 						prepareStatement("INSERT OR REPLACE INTO config(key, value) VALUES(?, ?)", pstmt -> {
-							log.debug("INSERT config inputPrefixDirName = " + textOnEvent);
-							pstmt.setString(1, "inputPrefixDirName");
+							log.debug("INSERT config _inputPrefixDirName = " + textOnEvent);
+							pstmt.setString(1, "_inputPrefixDirName");
 							pstmt.setString(2, textOnEvent);
 						});
 					});
@@ -191,6 +191,36 @@ public class ConfigurationStore {
 			}, 300, TimeUnit.MILLISECONDS);
 		});
 
+		final Thread closeThread = new Thread(() -> {
+			log.info("Save configuration");
+			config.forEach((k, v) -> {
+				prepareStatement("INSERT OR REPLACE INTO config(key, value) VALUES(?, ?)", pstmt -> {
+					log.debug("INSERT config ? = ?", k, v);
+					pstmt.setString(1, (String) k);
+					pstmt.setString(2, (String) v);
+				});
+			});
+		});
+		closeThread.setDaemon(false);
+		closeThread.setPriority(Thread.MAX_PRIORITY);
+		closeThread.setName("Save config on close");
+		Runtime.getRuntime().addShutdownHook(closeThread);
+	}
+
+	public Optional<String> getConfigValue(final String key) {
+		return Optional.ofNullable((String) config.get(key));
+	}
+
+	public Optional<Double> getConfigDoubleValue(final String key) {
+		return getConfigValue(key).map(w -> Double.parseDouble(w));
+	}
+
+	public void setConfigValue(final String key, final String value) {
+		config.setProperty(key, value);
+	}
+
+	public void setConfigValue(final String key, final double value) {
+		config.setProperty(key, String.valueOf(value));
 	}
 
 	private void prepareStatement(final String sql, final PreparedStatementConsumerWithSQLException withPstmt) {
