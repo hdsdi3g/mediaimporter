@@ -20,6 +20,7 @@ import java.io.File;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TableColumn;
@@ -75,6 +76,10 @@ public class MainPanel {
 	private Button btnClearScanlist;
 	@FXML
 	private TextField inputPrefixDirName;
+	@FXML
+	private Label lblAppAbout;
+	@FXML
+	private Hyperlink lblAppLink;
 	@FXML
 	private TableView<FileEntry> tableFiles;
 	@FXML
@@ -234,4 +239,11 @@ public class MainPanel {
 		return tableDestinationsColType;
 	}
 
+	public Label getLblAppAbout() {
+		return lblAppAbout;
+	}
+
+	public Hyperlink getLblAppLink() {
+		return lblAppLink;
+	}
 }

@@ -485,6 +485,26 @@ public class MainApp extends Application {
 			new TableContextMenu(mainPanel.getTableSources(), navigateTo, toolRunner);
 			new TableContextMenu(mainPanel.getTableDestinations(), navigateTo, toolRunner);
 			new TableContextMenu(mainPanel.getTableFiles(), navigateTo, toolRunner);
+
+			/**
+			 * Display "about" labels
+			 */
+			final StringBuilder aboutText = new StringBuilder();
+			aboutText.append(System.getProperty("javappackager.appversion", ""));
+			aboutText.append(" ");
+			aboutText.append(System.getProperty("javappackager.gitversion", ""));
+			if (aboutText.toString().trim().equals("") == false) {
+				mainPanel.getLblAppAbout().setText("Version: " + aboutText.toString().trim());
+			}
+			final String appUrl = System.getProperty("javappackager.url");
+			if (appUrl != null) {
+				mainPanel.getLblAppLink().setText(appUrl);
+				mainPanel.getLblAppLink().setOnAction(event -> {
+					getHostServices().showDocument(appUrl);
+					event.consume();
+				});
+			}
+
 		} catch (final Exception e) {
 			log.error("Error during loading app", e);
 			System.exit(1);

@@ -15,6 +15,8 @@
 		<maven.compiler.source>11</maven.compiler.source>
 		<maven.compiler.target>11</maven.compiler.target>
 		<maven.javadoc.skip>true</maven.javadoc.skip>
+		<javappackager.mainclass>tv.hd3g.mediaimporter.MainClass</javappackager.mainclass>
+		<javappackager.windowsicon>src/main/resources/icon.ico</javappackager.windowsicon>
 	</properties>
 
 	<dependencies>
