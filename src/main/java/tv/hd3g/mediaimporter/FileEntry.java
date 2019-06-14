@@ -36,6 +36,7 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.util.Callback;
+import tv.hd3g.mediaimporter.io.IntegrityAllState;
 
 public class FileEntry implements TargetedFileEntries {
 
@@ -51,7 +52,9 @@ public class FileEntry implements TargetedFileEntries {
 	private final Map<File, Long> digestByFileCache;
 
 	private IOException lastCopyError;
-	private FileEntryStatus currentResumeStatus;
+	private volatile FileEntryStatus currentResumeStatus;
+	private String computedDigest;
+	private IntegrityAllState integrityAllStates;
 
 	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList, final Map<File, Long> digestByFileCache) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
@@ -75,6 +78,8 @@ public class FileEntry implements TargetedFileEntries {
 		}
 		this.destsList = destsList;
 		currentResumeStatus = FileEntryStatus.NOT_STARTED;
+		computedDigest = "";
+		integrityAllStates = IntegrityAllState.NOT_CHECKED;
 	}
 
 	public void addDestination(final DestinationEntry destination) {
@@ -179,6 +184,14 @@ public class FileEntry implements TargetedFileEntries {
 		} else if (copiesByDestination.isEmpty()) {
 			status.setValue(MainApp.messages.getString("fileEntryStatusNew"));
 			currentResumeStatus = FileEntryStatus.NOT_STARTED;
+		} else if (integrityAllStates != IntegrityAllState.NOT_CHECKED) {
+			if (integrityAllStates == IntegrityAllState.ALL_VALID) {
+				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusDoneCheck"), copiesByDestination.size()));
+				currentResumeStatus = FileEntryStatus.INTEGRITY_VALID;
+			} else {
+				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusDoneCorrupted"), copiesByDestination.size()));
+				currentResumeStatus = FileEntryStatus.INTEGRITY_INVALID;
+			}
 		} else {
 			final boolean isNotOnError = copiesByDestination.values().stream().allMatch(isSameSize);
 			if (copiesByDestination.size() == destsList.size()) {
@@ -328,6 +341,25 @@ public class FileEntry implements TargetedFileEntries {
 		});
 
 		return Stream.concat(sourceEntry, destEntries).collect(Collectors.toUnmodifiableList());
+	}
+
+	public void setDigest(final String computedDigest) {
+		this.computedDigest = computedDigest;
+	}
+
+	public String getDigest() {
+		return computedDigest;
+	}
+
+	public synchronized void setAllCopiesIntegrity(final IntegrityAllState integrityAllStates) {
+		if (this.integrityAllStates != IntegrityAllState.NOT_CHECKED) {
+			if (this.integrityAllStates != integrityAllStates) {
+				throw new RuntimeException("Can't update twice integrity status for " + file + " (" + this.integrityAllStates + " is not " + integrityAllStates + ")");
+			}
+			return;
+		}
+		this.integrityAllStates = integrityAllStates;
+		updateStatus();
 	}
 
 }

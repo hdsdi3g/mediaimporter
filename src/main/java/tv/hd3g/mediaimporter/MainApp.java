@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -71,6 +72,8 @@ import javafx.scene.text.TextAlignment;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import tv.hd3g.mediaimporter.io.CopyFilesEngine;
+import tv.hd3g.mediaimporter.io.CopyOperation.CopyOperationResult;
+import tv.hd3g.mediaimporter.io.IntegrityCheckEngine;
 import tv.hd3g.mediaimporter.tools.ConfigurationStore;
 import tv.hd3g.mediaimporter.tools.DriveProbe;
 import tv.hd3g.mediaimporter.tools.FileSanity;
@@ -443,16 +446,30 @@ public class MainApp extends Application {
 				try {
 					final CopyFilesEngine copyFilesEngine = new CopyFilesEngine(fileList, destsList, this);
 					currentCopyEngine.set(copyFilesEngine);
-					copyFilesEngine.asyncStart().thenRunAsync(() -> {
+					final CompletableFuture<List<CopyOperationResult>> copiedListCF = copyFilesEngine.asyncStart();
+					copiedListCF.thenRun(() -> {
 						Platform.runLater(() -> {
 							afterCopyOperation();
 						});
+					});
+
+					// TODO display checks progress
+					// TODO manage stop
+					// TODO why the last is not even check ?
+					// TODO add hash listing
+					// TODO add multiple hashs
+
+					copiedListCF.thenAccept(copiedList -> {
+						final var onlyValidCopiedList = copiedList.stream().filter(c -> FileEntryStatus.ALL_COPIES_DONE.equals(c.getSourceEntry().getCurrentResumeStatus())).collect(Collectors.toUnmodifiableList());
+						final IntegrityCheckEngine ice = new IntegrityCheckEngine(onlyValidCopiedList);
+						ice.run();
 					});
 				} catch (final Exception e) {
 					log4javaFx.error("Can't process copy operation", e);
 					afterCopyOperation();
 				}
 			});
+
 			mainPanel.getBtnStopCopy().setOnAction(event -> {
 				event.consume();
 				if (currentCopyEngine.isNull().get()) {

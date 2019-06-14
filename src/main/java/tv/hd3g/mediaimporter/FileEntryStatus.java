@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 
 public enum FileEntryStatus {
 
-	ALL_COPIES_DONE, NOT_STARTED, PARTIAL_DONE, ERROR_OR_INCOMPLETE;
+	ALL_COPIES_DONE, NOT_STARTED, PARTIAL_DONE, ERROR_OR_INCOMPLETE, INTEGRITY_VALID, INTEGRITY_INVALID;
 
 	public static Map<FileEntryStatus, Integer> countByStatuses(final List<FileEntry> allFiles) {
 		return Arrays.stream(FileEntryStatus.values()).collect(Collectors.toUnmodifiableMap(status -> {

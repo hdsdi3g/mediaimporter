@@ -35,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 import tv.hd3g.mediaimporter.DestinationEntry;
 import tv.hd3g.mediaimporter.FileEntry;
 import tv.hd3g.mediaimporter.MainApp;
+import tv.hd3g.mediaimporter.io.CopyOperation.CopyOperationResult;
 
 public class CopyFilesEngine {
 	private static Logger log = LogManager.getLogger();
@@ -43,7 +44,7 @@ public class CopyFilesEngine {
 	final List<DestinationEntry> allDestinations;
 	private final ThreadPoolExecutor mainExecutor;
 	private final ThreadPoolExecutor writeExecutor;
-	private CompletableFuture<?> allTasks;
+	private CompletableFuture<List<CopyOperationResult>> allTasks;
 
 	private final long dataSizeToCopyBytes;
 	private final GlobalCopyStat globalCopyStat;
@@ -64,7 +65,7 @@ public class CopyFilesEngine {
 		});
 
 		final AtomicLong counter = new AtomicLong();
-		final int size = Math.min(allDestinations.size(), Runtime.getRuntime().availableProcessors());
+		final int size = Math.min(allDestinations.size() + 1, Runtime.getRuntime().availableProcessors());
 		writeExecutor = new ThreadPoolExecutor(size, size, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
 			final Thread t = new Thread(r);
 			t.setDaemon(true);
@@ -113,11 +114,11 @@ public class CopyFilesEngine {
 	/**
 	 * Non-blocking
 	 */
-	public CompletableFuture<?> asyncStart() {
+	public CompletableFuture<List<CopyOperationResult>> asyncStart() {
 		log.info("Put " + copyList.size() + " item(s) in queue for copy");
 
-		allTasks = CompletableFuture.runAsync(() -> {
-			copyList.stream().filter(cL -> wantToStop == false).forEach(CopyOperation::run);
+		allTasks = CompletableFuture.supplyAsync(() -> {
+			return copyList.stream().filter(cL -> wantToStop == false).map(CopyOperation::run).collect(Collectors.toUnmodifiableList());
 		}, mainExecutor);
 
 		final ScheduledFuture<?> regularUIUpdaterFuture = Executors.newScheduledThreadPool(1, r -> {
@@ -137,6 +138,9 @@ public class CopyFilesEngine {
 					slot.addLogHistoryOnEndAllCopies(dataSizeToCopyBytes, duration);
 				});
 			}
+
+			mainExecutor.shutdown();
+			writeExecutor.shutdown();
 		});
 		return allTasks;
 	}

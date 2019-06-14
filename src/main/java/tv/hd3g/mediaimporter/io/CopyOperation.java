@@ -24,6 +24,8 @@ import java.nio.channels.FileChannel;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -37,6 +39,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -46,6 +49,7 @@ import javafx.application.Platform;
 import tv.hd3g.mediaimporter.DestinationEntrySlot;
 import tv.hd3g.mediaimporter.FileEntry;
 import tv.hd3g.mediaimporter.MainApp;
+import tv.hd3g.mediaimporter.MainClass;
 
 public class CopyOperation {
 	private static Logger log = LogManager.getLogger();
@@ -61,6 +65,7 @@ public class CopyOperation {
 	private final Executor writeExecutor;
 	private volatile boolean wantToStop;
 	private final CopyStat copyStat;
+	private final MessageDigest sourceMessageDigest;
 
 	CopyOperation(final FileEntry entryToCopy, final ByteBuffer bufferA, final ByteBuffer bufferB, final Executor writeExecutor) throws IOException {
 		this.entryToCopy = entryToCopy;
@@ -71,16 +76,22 @@ public class CopyOperation {
 		source = entryToCopy.getFile().toPath();
 		destinationListToCopy = entryToCopy.getToCopyDestinationSlotList();
 		copyStat = new CopyStat(this, entryToCopy.getFile().length());
+
+		try {
+			sourceMessageDigest = MessageDigest.getInstance(MainClass.DIGEST_NAME);
+		} catch (final NoSuchAlgorithmException e) {
+			throw new RuntimeException("Can't init " + MainClass.DIGEST_NAME + " Digest", e);
+		}
 	}
 
 	List<DestinationEntrySlot> getDestinationListToCopy() {
 		return destinationListToCopy;
 	}
 
-	public void run() {
+	public CopyOperationResult run() {
 		if (destinationListToCopy.isEmpty()) {
 			log.error("No destinations to copy for " + entryToCopy);
-			return;
+			return new CopyOperationResult(Map.of());
 		}
 		copyStat.onStart();
 		log.info("Start to copy " + entryToCopy + " (" + MainApp.byteCountToDisplaySizeWithPrecision(entryToCopy.getFile().length()) + ") to " + destinationListToCopy.size() + " destination(s)");
@@ -144,9 +155,11 @@ public class CopyOperation {
 			currentBuffer.clear();
 
 			List<CompletableFuture<?>> writers = Collections.emptyList();
+			CompletableFuture<?> sourceDigestReadingChunk = CompletableFuture.completedFuture(null);
+
 			while (sourceChannel.read(currentBuffer) > 0) {
 				if (wantToStop) {
-					return;
+					return new CopyOperationResult(Map.of());
 				}
 				currentBuffer.flip();
 				copyStat.onReadWriteLoop(currentBuffer.remaining(), System.nanoTime() - lastLoopDateNanoSec);
@@ -161,6 +174,7 @@ public class CopyOperation {
 						throw new RuntimeException(e);
 					}
 				});
+				sourceDigestReadingChunk.get();
 
 				final ByteBuffer currentWriteBuffer = currentBuffer;
 				/**
@@ -185,6 +199,13 @@ public class CopyOperation {
 				currentBuffer = bufferPool.get(0);
 				currentBuffer.clear();
 
+				sourceDigestReadingChunk = CompletableFuture.runAsync(() -> {
+					if (wantToStop) {
+						return;
+					}
+					sourceMessageDigest.update(currentWriteBuffer.asReadOnlyBuffer());
+				}, writeExecutor);
+
 				lastLoopDateNanoSec = System.nanoTime();
 			}
 
@@ -198,6 +219,7 @@ public class CopyOperation {
 					throw new RuntimeException(e);
 				}
 			});
+			sourceDigestReadingChunk.get();
 
 			/*for (final FileChannel destinationChannel : destinationChannels.keySet()) {
 				destinationChannel.force(true);
@@ -254,7 +276,11 @@ public class CopyOperation {
 			entry.getValue().addLogHistoryOnEndCopy(pathByFileChannel.get(entry.getKey()).toFile());
 		}
 
+		final String computedDigest = byteToString(sourceMessageDigest.digest());
+		log.debug("Computed {} for {} is {}", sourceMessageDigest.getAlgorithm(), source, computedDigest);
+
 		Platform.runLater(() -> {
+			entryToCopy.setDigest(computedDigest);
 			entryToCopy.updateState();
 		});
 
@@ -262,6 +288,48 @@ public class CopyOperation {
 		slotsToCopyByPath.keySet().stream().forEach(path -> {
 			path.toFile().setLastModified(lastModified);
 		});
+
+		return new CopyOperationResult(slotsToCopyByPath);
+	}
+
+	public class CopyOperationResult {
+
+		private final Map<DestinationEntrySlot, Path> resultCopies;
+
+		private CopyOperationResult(final Map<Path, DestinationEntrySlot> resultCopies) {
+			/**
+			 * Revert map key <-> value
+			 */
+			this.resultCopies = resultCopies.entrySet().stream().collect(Collectors.toUnmodifiableMap(entry -> {
+				return entry.getValue();
+			}, entry -> {
+				return entry.getKey();
+			}));
+		}
+
+		public FileEntry getSourceEntry() {
+			return entryToCopy;
+		}
+
+		public Map<DestinationEntrySlot, Path> getResultCopies() {
+			return resultCopies;
+		}
+
+		public Stream<DestinationEntrySlot> getSlots() {
+			return getResultCopies().keySet().stream();
+		}
+	}
+
+	public static final String byteToString(final byte[] b) {
+		final StringBuffer sb = new StringBuffer();
+		for (int i = 0; i < b.length; i++) {
+			final int v = b[i] & 0xFF;
+			if (v < 16) {
+				sb.append(0);
+			}
+			sb.append(Integer.toString(v, 16).toLowerCase());
+		}
+		return sb.toString();
 	}
 
 	public long getSourceLength() {
