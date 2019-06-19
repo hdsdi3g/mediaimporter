@@ -159,7 +159,7 @@ public class FileEntry implements TargetedFileEntries {
 		private final File copy;
 		private final boolean sameSize;
 
-		CopiedFileReference(final File copy) {
+		private CopiedFileReference(final File copy) {
 			this.copy = Objects.requireNonNull(copy, "\"copy\" can't to be null");
 			sameSize = file.length() == copy.length();
 		}

@@ -20,6 +20,7 @@ import java.io.File;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
@@ -76,6 +77,8 @@ public class MainPanel {
 	private Button btnClearScanlist;
 	@FXML
 	private TextField inputPrefixDirName;
+	@FXML
+	private CheckBox cBCheckAfterCopy;
 	@FXML
 	private Label lblAppAbout;
 	@FXML
@@ -169,6 +172,10 @@ public class MainPanel {
 
 	public TextField getInputPrefixDirName() {
 		return inputPrefixDirName;
+	}
+
+	public CheckBox getCBCheckAfterCopy() {
+		return cBCheckAfterCopy;
 	}
 
 	public TableView<FileEntry> getTableFiles() {

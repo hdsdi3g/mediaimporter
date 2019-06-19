@@ -35,9 +35,8 @@ import org.apache.logging.log4j.Logger;
 import tv.hd3g.mediaimporter.DestinationEntry;
 import tv.hd3g.mediaimporter.FileEntry;
 import tv.hd3g.mediaimporter.MainApp;
-import tv.hd3g.mediaimporter.io.CopyOperation.CopyOperationResult;
 
-public class CopyFilesEngine {
+public class CopyFilesEngine implements CanBeStopped {
 	private static Logger log = LogManager.getLogger();
 
 	private final List<CopyOperation> copyList;
@@ -130,24 +129,25 @@ public class CopyFilesEngine {
 			globalCopyStat.refresh();
 		}, 300, 300, TimeUnit.MILLISECONDS);
 
-		allTasks.whenCompleteAsync((ok, error) -> {
+		return allTasks.thenApplyAsync(taskList -> {
 			regularUIUpdaterFuture.cancel(false);
-			if (error == null) {
-				final long duration = globalCopyStat.getEndDate() - globalCopyStat.getSetStartDate();
-				globalCopyStat.getSlotList().forEach(slot -> {
-					slot.addLogHistoryOnEndAllCopies(dataSizeToCopyBytes, duration);
-				});
-			}
 
+			final long duration = globalCopyStat.getEndDate() - globalCopyStat.getSetStartDate();
+			globalCopyStat.getSlotList().forEach(slot -> {
+				slot.addLogHistoryOnEndAllCopies(dataSizeToCopyBytes, duration);
+			});
+
+			return taskList;
+		}).whenCompleteAsync((ok, err) -> {
 			mainExecutor.shutdown();
 			writeExecutor.shutdown();
 		});
-		return allTasks;
 	}
 
 	/**
 	 * Non-blocking
 	 */
+	@Override
 	public void asyncStop(final Runnable onDone) {
 		wantToStop = true;
 

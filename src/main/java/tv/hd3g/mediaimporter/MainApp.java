@@ -71,8 +71,8 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
+import tv.hd3g.mediaimporter.io.CanBeStopped;
 import tv.hd3g.mediaimporter.io.CopyFilesEngine;
-import tv.hd3g.mediaimporter.io.CopyOperation.CopyOperationResult;
 import tv.hd3g.mediaimporter.io.IntegrityCheckEngine;
 import tv.hd3g.mediaimporter.tools.ConfigurationStore;
 import tv.hd3g.mediaimporter.tools.DriveProbe;
@@ -101,7 +101,7 @@ public class MainApp extends Application {
 	private final ObservableList<FileEntry> fileList;
 	private final ToolRunner toolRunner;
 	private final NavigateTo navigateTo;
-	private final SimpleObjectProperty<CopyFilesEngine> currentCopyEngine;
+	private final SimpleObjectProperty<CanBeStopped> currentCopyEngine;
 	private final FileSanity fileSanity;
 	private final ConcurrentHashMap<File, Long> digestByFileCache;
 
@@ -190,9 +190,10 @@ public class MainApp extends Application {
 			store.getConfigDoubleValue("primaryStage.height").ifPresent(stage::setHeight);
 			store.getConfigDoubleValue("primaryStage.x").ifPresent(stage::setX);
 			store.getConfigDoubleValue("primaryStage.y").ifPresent(stage::setY);
+			store.getConfigValue("CBCheckAfterCopy").map(Boolean::parseBoolean).or(() -> Optional.of(true)).ifPresent(mainPanel.getCBCheckAfterCopy()::setSelected);
 
 			stage.setScene(scene);
-			stage.setTitle("Media importer");
+			stage.setTitle(System.getProperty("javappackager.appname", "Media importer"));
 			stage.show();
 
 			stage.setOnCloseRequest(event -> {
@@ -408,6 +409,7 @@ public class MainApp extends Application {
 
 				displayStatusMsgBox();
 			});
+
 			mainPanel.getBtnClearScanlist().setOnAction(event -> {
 				event.consume();
 				log.info("Clear scan list");
@@ -446,27 +448,47 @@ public class MainApp extends Application {
 				try {
 					final CopyFilesEngine copyFilesEngine = new CopyFilesEngine(fileList, destsList, this);
 					currentCopyEngine.set(copyFilesEngine);
-					final CompletableFuture<List<CopyOperationResult>> copiedListCF = copyFilesEngine.asyncStart();
-					copiedListCF.thenRun(() -> {
+
+					copyFilesEngine.asyncStart().thenCompose(copiedList -> {
+						final boolean checkAfterCopy = mainPanel.getCBCheckAfterCopy().isSelected();
+
+						if (checkAfterCopy) {
+							Platform.runLater(() -> {
+								afterCopyBeforeCheckOperation();
+							});
+							CompletableFuture.runAsync(() -> {
+								Platform.runLater(() -> {
+									displayStatusMsgBox();
+								});
+							});
+
+							fileList.stream().forEach(f -> {
+								f.updateState();
+							});
+
+							final var onlyValidCopiedList = copiedList.stream().filter(c -> {
+								return FileEntryStatus.ALL_COPIES_DONE.equals(c.getSourceEntry().getCurrentResumeStatus());
+							}).collect(Collectors.toUnmodifiableList());
+
+							final var ice = new IntegrityCheckEngine(onlyValidCopiedList);
+							currentCopyEngine.set(ice);
+
+							return ice.start(Runnable::run);
+						} else {
+							log.info("Skip file integrity check");
+							return CompletableFuture.completedStage(null);
+						}
+					}).thenAccept(v -> {
 						Platform.runLater(() -> {
-							afterCopyOperation();
+							afterAllOperations();
 						});
 					});
 
-					// TODO display checks progress
-					// TODO manage stop
-					// TODO why the last is not even check ?
 					// TODO add hash listing
 					// TODO add multiple hashs
-
-					copiedListCF.thenAccept(copiedList -> {
-						final var onlyValidCopiedList = copiedList.stream().filter(c -> FileEntryStatus.ALL_COPIES_DONE.equals(c.getSourceEntry().getCurrentResumeStatus())).collect(Collectors.toUnmodifiableList());
-						final IntegrityCheckEngine ice = new IntegrityCheckEngine(onlyValidCopiedList);
-						ice.run();
-					});
 				} catch (final Exception e) {
 					log4javaFx.error("Can't process copy operation", e);
-					afterCopyOperation();
+					afterAllOperations();
 				}
 			});
 
@@ -479,7 +501,7 @@ public class MainApp extends Application {
 
 				currentCopyEngine.get().asyncStop(() -> {
 					Platform.runLater(() -> {
-						afterCopyOperation();
+						afterAllOperations();
 					});
 				});
 			});
@@ -580,6 +602,7 @@ public class MainApp extends Application {
 		store.setConfigValue("primaryStage.height", stage.getHeight());
 		store.setConfigValue("primaryStage.x", stage.getX());
 		store.setConfigValue("primaryStage.y", stage.getY());
+		store.setConfigValue("CBCheckAfterCopy", Boolean.toString(mainPanel.getCBCheckAfterCopy().isSelected()));
 
 		log.info("JavaFX GUI Interface is stopped");
 		System.exit(0);
@@ -634,7 +657,7 @@ public class MainApp extends Application {
 		mainPanel.getLblSpeedCopy().setText(speedCopy);
 	}
 
-	private void afterCopyOperation() {
+	private void afterAllOperations() {
 		currentCopyEngine.setValue(null);
 		mainPanel.getBtnAddSourceDir().setDisable(false);
 		mainPanel.getBtnRemoveSourceDir().setDisable(false);
@@ -653,6 +676,12 @@ public class MainApp extends Application {
 			f.updateState();
 		});
 		displayStatusMsgBox();
+	}
+
+	private void afterCopyBeforeCheckOperation() {
+		mainPanel.getProgressBar().setProgress(0);
+		mainPanel.getLblEta().setText("");
+		mainPanel.getLblSpeedCopy().setText(messages.getString("labelProgressCheck"));
 	}
 
 	private void displayStatusMsgBox() {
@@ -675,6 +704,10 @@ public class MainApp extends Application {
 			header = messages.getString("statusMsgboxHeader_PARTIAL_DONE");
 		} else if (countByStatuses.get(FileEntryStatus.NOT_STARTED).intValue() > 0) {
 			header = messages.getString("statusMsgboxHeader_NOT_STARTED");
+		} else if (countByStatuses.get(FileEntryStatus.INTEGRITY_INVALID).intValue() > 0) {
+			header = messages.getString("statusMsgboxHeader_INTEGRITY_INVALID");
+		} else if (countByStatuses.get(FileEntryStatus.INTEGRITY_VALID).intValue() > 0) {
+			header = messages.getString("statusMsgboxHeader_INTEGRITY_VALID");
 		} else {
 			header = messages.getString("statusMsgboxHeader_ALL_COPIES_DONE");
 		}

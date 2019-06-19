@@ -39,7 +39,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -91,7 +90,7 @@ public class CopyOperation {
 	public CopyOperationResult run() {
 		if (destinationListToCopy.isEmpty()) {
 			log.error("No destinations to copy for " + entryToCopy);
-			return new CopyOperationResult(Map.of());
+			return new CopyOperationResult(entryToCopy, Map.of());
 		}
 		copyStat.onStart();
 		log.info("Start to copy " + entryToCopy + " (" + MainApp.byteCountToDisplaySizeWithPrecision(entryToCopy.getFile().length()) + ") to " + destinationListToCopy.size() + " destination(s)");
@@ -159,7 +158,7 @@ public class CopyOperation {
 
 			while (sourceChannel.read(currentBuffer) > 0) {
 				if (wantToStop) {
-					return new CopyOperationResult(Map.of());
+					return new CopyOperationResult(entryToCopy, Map.of());
 				}
 				currentBuffer.flip();
 				copyStat.onReadWriteLoop(currentBuffer.remaining(), System.nanoTime() - lastLoopDateNanoSec);
@@ -289,35 +288,7 @@ public class CopyOperation {
 			path.toFile().setLastModified(lastModified);
 		});
 
-		return new CopyOperationResult(slotsToCopyByPath);
-	}
-
-	public class CopyOperationResult {
-
-		private final Map<DestinationEntrySlot, Path> resultCopies;
-
-		private CopyOperationResult(final Map<Path, DestinationEntrySlot> resultCopies) {
-			/**
-			 * Revert map key <-> value
-			 */
-			this.resultCopies = resultCopies.entrySet().stream().collect(Collectors.toUnmodifiableMap(entry -> {
-				return entry.getValue();
-			}, entry -> {
-				return entry.getKey();
-			}));
-		}
-
-		public FileEntry getSourceEntry() {
-			return entryToCopy;
-		}
-
-		public Map<DestinationEntrySlot, Path> getResultCopies() {
-			return resultCopies;
-		}
-
-		public Stream<DestinationEntrySlot> getSlots() {
-			return getResultCopies().keySet().stream();
-		}
+		return new CopyOperationResult(entryToCopy, slotsToCopyByPath);
 	}
 
 	public static final String byteToString(final byte[] b) {

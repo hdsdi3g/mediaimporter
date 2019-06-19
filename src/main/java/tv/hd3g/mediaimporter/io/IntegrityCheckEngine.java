@@ -30,6 +30,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -43,9 +44,8 @@ import javafx.application.Platform;
 import tv.hd3g.mediaimporter.DestinationEntrySlot;
 import tv.hd3g.mediaimporter.FileEntry;
 import tv.hd3g.mediaimporter.MainClass;
-import tv.hd3g.mediaimporter.io.CopyOperation.CopyOperationResult;
 
-public class IntegrityCheckEngine {
+public class IntegrityCheckEngine implements CanBeStopped {
 	private static Logger log = LogManager.getLogger();
 	private static final Set<OpenOption> OPEN_OPTIONS_READ_ONLY = Set.of(StandardOpenOption.READ);
 
@@ -53,11 +53,18 @@ public class IntegrityCheckEngine {
 	private final ThreadPoolExecutor executor;
 	private final Map<FileEntry, List<ToCheck>> toCheckListBySources;
 
+	private volatile boolean wantToStop;
+	private CompletableFuture<?> currentTask;
+
 	/**
 	 * Not reusable
 	 */
 	public IntegrityCheckEngine(final List<CopyOperationResult> copiedList) {
 		Objects.requireNonNull(copiedList, "\"copiedList\" can't to be null");
+
+		log.debug("Get copiedList source {}", () -> {
+			return copiedList.stream().map(cl -> cl.getSourceEntry().getRelativePath()).collect(Collectors.toUnmodifiableList());
+		});
 
 		final List<DestinationEntrySlot> slots = copiedList.stream().flatMap(CopyOperationResult::getSlots).distinct().collect(Collectors.toUnmodifiableList());
 		final Map<DestinationEntrySlot, ByteBuffer> buffersBySlots = slots.stream().collect(Collectors.toUnmodifiableMap(slot -> slot, slot -> ByteBuffer.allocateDirect(4096)));
@@ -91,6 +98,10 @@ public class IntegrityCheckEngine {
 				return toCheck.sourceEntry.equals(sourceEntry);
 			}).collect(Collectors.toUnmodifiableList());
 		}));
+
+		toCheckBySlots.keySet().forEach(slot -> {
+			log.debug("Prepare to compute integrity checks for {}", () -> toCheckBySlots.get(slot));
+		});
 	}
 
 	private class ToCheck {
@@ -117,6 +128,9 @@ public class IntegrityCheckEngine {
 			buffer.clear();
 			try (final FileChannel channel = FileChannel.open(copied, OPEN_OPTIONS_READ_ONLY)) {
 				while (channel.read(buffer) > 0) {
+					if (wantToStop) {
+						break;
+					}
 					buffer.flip();
 					destMessageDigest.update(buffer);
 					buffer.clear();
@@ -127,18 +141,27 @@ public class IntegrityCheckEngine {
 		private String getDigest() {
 			return CopyOperation.byteToString(destMessageDigest.digest());
 		}
+
+		@Override
+		public String toString() {
+			return copied.toString();
+		}
 	}
 
 	/**
-	 * Sync
+	 * Async
 	 */
-	public void run() {
-		toCheckBySlots.keySet().stream().map(slot -> {
-			return CompletableFuture.runAsync(() -> {
-				toCheckBySlots.get(slot).forEach(check -> {
+	public CompletableFuture<?> start(final Executor waitForEndExecutor) {
+		final var cfList = toCheckBySlots.keySet().stream().map(slot -> {
+			return CompletableFuture.supplyAsync(() -> {
+				toCheckBySlots.get(slot).stream().filter(cL -> wantToStop == false).forEach(check -> {
 					try {
 						log.info("Start to check integrity for {}", check.copied);
 						check.readFile();
+
+						if (wantToStop) {
+							return;
+						}
 
 						final String copiedDigest = check.getDigest();
 						final String sourceDigest = check.sourceEntry.getDigest();
@@ -155,15 +178,27 @@ public class IntegrityCheckEngine {
 
 					refreshDisplay(check.sourceEntry);
 				});
+
+				return slot;
 			}, executor);
-		}).collect(Collectors.toUnmodifiableList()).forEach(action -> {
-			try {
-				action.get();
-			} catch (InterruptedException | ExecutionException e) {
-				throw new RuntimeException("Can't wait all checks operations", e);
-			}
-		});
-		executor.shutdown();
+		}).collect(Collectors.toUnmodifiableList());
+
+		currentTask = CompletableFuture.runAsync(() -> {
+			cfList.forEach(action -> {
+				if (wantToStop) {
+					return;
+				}
+				try {
+					final var slot = action.get();
+					log.debug("All integrity checks are done for {}", () -> toCheckBySlots.get(slot));
+				} catch (InterruptedException | ExecutionException e) {
+					throw new RuntimeException("Can't wait all checks operations", e);
+				}
+			});
+			executor.shutdown();
+		}, waitForEndExecutor);
+
+		return currentTask;
 	}
 
 	private void refreshDisplay(final FileEntry sourceEntry) {
@@ -179,6 +214,28 @@ public class IntegrityCheckEngine {
 
 		Platform.runLater(() -> {
 			sourceEntry.setAllCopiesIntegrity(IntegrityAllState.get(allValid, allInvalid));
+		});
+	}
+
+	@Override
+	public void asyncStop(final Runnable onDone) {
+		wantToStop = true;
+
+		if (executor.getActiveCount() == 0) {
+			executor.shutdown();
+			onDone.run();
+			return;
+		}
+		log.info("Set to stop current check queue: " + executor.getQueue().size() + " item(s)");
+
+		if (currentTask != null) {
+			currentTask.completeExceptionally(new Exception("Manual stop operation"));
+		}
+
+		executor.getQueue().clear();
+
+		CompletableFuture.runAsync(onDone, executor).thenAcceptAsync(v -> {
+			executor.shutdown();
 		});
 	}
 
