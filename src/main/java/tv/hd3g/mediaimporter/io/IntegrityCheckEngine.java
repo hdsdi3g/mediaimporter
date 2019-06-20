@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -74,7 +75,7 @@ public class IntegrityCheckEngine implements CanBeStopped {
 		}, slot -> {
 			return copiedList.stream().map(copyOperationResult -> {
 				final Path pathForSlot = copyOperationResult.getResultCopies().get(slot);
-				return new ToCheck(copyOperationResult.getSourceEntry(), pathForSlot, buffersBySlots.get(slot));
+				return new ToCheck(copyOperationResult.getSourceEntry(), slot, pathForSlot, buffersBySlots.get(slot));
 			}).collect(Collectors.toUnmodifiableList());
 		}));
 
@@ -108,38 +109,53 @@ public class IntegrityCheckEngine implements CanBeStopped {
 		private final FileEntry sourceEntry;
 		private final Path copied;
 		private final ByteBuffer buffer;
-		private final MessageDigest destMessageDigest;
+		private final DestinationEntrySlot destinationSlot;
+		private String digest;
 		private volatile IntegrityState state;
 
-		private ToCheck(final FileEntry sourceEntry, final Path copied, final ByteBuffer buffer) {
+		private ToCheck(final FileEntry sourceEntry, final DestinationEntrySlot destinationSlot, final Path copied, final ByteBuffer buffer) {
 			this.sourceEntry = Objects.requireNonNull(sourceEntry, "\"sourceEntry\" can't to be null");
+			this.destinationSlot = Objects.requireNonNull(destinationSlot, "\"destinationSlot\" can't to be null");
 			this.copied = Objects.requireNonNull(copied, "\"copied\" can't to be null");
 			this.buffer = Objects.requireNonNull(buffer, "\"buffer\" can't to be null");
 			state = IntegrityState.NOT_CHECKED;
-
-			try {
-				destMessageDigest = MessageDigest.getInstance(MainClass.DIGEST_NAME);
-			} catch (final NoSuchAlgorithmException e) {
-				throw new RuntimeException("Can't init " + MainClass.DIGEST_NAME + " Digest", e);
-			}
 		}
 
 		private void readFile() throws IOException {
+			final List<MessageDigest> digests = Arrays.stream(MainClass.DIGEST_NAMES).map(digestName -> {
+				try {
+					return MessageDigest.getInstance(digestName);
+				} catch (final NoSuchAlgorithmException e) {
+					throw new RuntimeException("Can't init " + digestName + " Digest", e);
+				}
+			}).collect(Collectors.toUnmodifiableList());
+
 			buffer.clear();
 			try (final FileChannel channel = FileChannel.open(copied, OPEN_OPTIONS_READ_ONLY)) {
 				while (channel.read(buffer) > 0) {
 					if (wantToStop) {
 						break;
 					}
-					buffer.flip();
-					destMessageDigest.update(buffer);
+					digests.forEach(md -> {
+						buffer.flip();
+						md.update(buffer);
+					});
 					buffer.clear();
 				}
 			}
+
+			final var digestByAlgorithm = digests.stream().collect(Collectors.toUnmodifiableMap(md -> {
+				return md.getAlgorithm();
+			}, md -> {
+				return CopyOperation.byteToString(md.digest());
+			}));
+
+			digest = digestByAlgorithm.get(MainClass.DIGEST_NAMES[0]);
+			destinationSlot.addComputedDigestToListFile(copied.toFile(), digestByAlgorithm);
 		}
 
 		private String getDigest() {
-			return CopyOperation.byteToString(destMessageDigest.digest());
+			return digest;
 		}
 
 		@Override

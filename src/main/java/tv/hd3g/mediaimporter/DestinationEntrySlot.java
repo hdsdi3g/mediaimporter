@@ -22,9 +22,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.OpenOption;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -35,8 +37,7 @@ import org.apache.logging.log4j.Logger;
 
 public class DestinationEntrySlot {
 	private static Logger log = LogManager.getLogger();
-	private static final Set<OpenOption> OPEN_OPTIONS_READ_WRITE_NEW = Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
-	private static final Set<OpenOption> OPEN_OPTIONS_READ_WRITE = Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE);
+	private static final Set<OpenOption> OPEN_OPTIONS_WRITE = Set.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE);
 
 	private final File slotRootDir;
 	private final DestinationEntry referer;
@@ -112,16 +113,10 @@ public class DestinationEntrySlot {
 
 	private void writeHistoryLog(final String text, final long date) {
 		final File historyFile = new File(slotRootDir.getPath() + File.separator + "history.log");
-		final Set<OpenOption> openOptions;
-		if (historyFile.exists()) {
-			openOptions = OPEN_OPTIONS_READ_WRITE;
-		} else {
-			openOptions = OPEN_OPTIONS_READ_WRITE_NEW;
-		}
 
-		try (final FileChannel logFile = FileChannel.open(historyFile.toPath(), openOptions)) {
+		try (final FileChannel logFile = FileChannel.open(historyFile.toPath(), OPEN_OPTIONS_WRITE)) {
 			if (logFile.size() > 0) {
-				logFile.position(logFile.size() - 1);
+				logFile.position(logFile.size());
 			}
 			logFile.write(ByteBuffer.wrap(historyLogDisplay.format(new Date(date)).concat("\t").getBytes(StandardCharsets.UTF_8)));
 			logFile.write(ByteBuffer.wrap(text.concat(System.lineSeparator()).getBytes(StandardCharsets.UTF_8)));
@@ -155,7 +150,7 @@ public class DestinationEntrySlot {
 		}
 
 		final StringBuilder sb = new StringBuilder();
-		sb.append("Total copy \"");
+		sb.append("Total copy ");
 		sb.append(dataSize);
 		sb.append(" bytes (");
 		sb.append(MainApp.byteCountToDisplaySizeWithPrecision(dataSize));
@@ -166,6 +161,31 @@ public class DestinationEntrySlot {
 		sb.append("/sec)");
 
 		writeHistoryLog(sb.toString(), System.currentTimeMillis());
+	}
+
+	public void addComputedDigestToListFile(final File dest, final Map<String, String> digestByAlgorithm) {
+		final var destPath = dest.getAbsolutePath();
+		final var slotDirPath = slotRootDir.getAbsolutePath();
+		if (dest.isDirectory() | dest.exists() == false | dest.equals(slotRootDir) | destPath.startsWith(slotDirPath) == false) {
+			throw new RuntimeException("Invalid file dest: " + dest);
+		}
+
+		final var relativeDestPath = destPath.substring(slotDirPath.length() + 1).replaceAll("\\\\", "/");
+
+		digestByAlgorithm.forEach((algorithmName, digest) -> {
+			final var digestName = algorithmName.toUpperCase().replaceAll("-", "");
+			final var digestToListFile = Path.of(slotDirPath, digestName + "SUM");
+
+			try (final FileChannel logFile = FileChannel.open(digestToListFile, OPEN_OPTIONS_WRITE)) {
+				if (logFile.size() > 0) {
+					logFile.position(logFile.size());
+				}
+				final var line = digest + "  " + relativeDestPath + "\n";
+				logFile.write(ByteBuffer.wrap(line.getBytes(StandardCharsets.UTF_8)));
+			} catch (final IOException e) {
+				log.error("Can't write digest list file", e);
+			}
+		});
 	}
 
 }

@@ -77,9 +77,9 @@ public class CopyOperation {
 		copyStat = new CopyStat(this, entryToCopy.getFile().length());
 
 		try {
-			sourceMessageDigest = MessageDigest.getInstance(MainClass.DIGEST_NAME);
+			sourceMessageDigest = MessageDigest.getInstance(MainClass.DIGEST_NAMES[0]);
 		} catch (final NoSuchAlgorithmException e) {
-			throw new RuntimeException("Can't init " + MainClass.DIGEST_NAME + " Digest", e);
+			throw new RuntimeException("Can't init " + MainClass.DIGEST_NAMES[0] + " Digest", e);
 		}
 	}
 

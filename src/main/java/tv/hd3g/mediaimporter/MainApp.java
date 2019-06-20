@@ -483,9 +483,6 @@ public class MainApp extends Application {
 							afterAllOperations();
 						});
 					});
-
-					// TODO add hash listing
-					// TODO add multiple hashs
 				} catch (final Exception e) {
 					log4javaFx.error("Can't process copy operation", e);
 					afterAllOperations();

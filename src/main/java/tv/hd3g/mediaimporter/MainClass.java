@@ -7,10 +7,12 @@ import javafx.application.Application;
 
 public class MainClass {
 
-	public static final String DIGEST_NAME = System.getProperty("integrity.digest.name", "SHA1");
+	public static final String[] DIGEST_NAMES = System.getProperty("integrity.digest.names", "MD5,SHA,SHA-256").split(",");
 
 	public static void main(final String[] args) throws NoSuchAlgorithmException {
-		MessageDigest.getInstance(DIGEST_NAME);
+		for (int i = 0; i < DIGEST_NAMES.length; i++) {
+			MessageDigest.getInstance(DIGEST_NAMES[i]);
+		}
 		Application.launch(MainApp.class);
 	}
 
