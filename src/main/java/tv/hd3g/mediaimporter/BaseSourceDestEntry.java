@@ -77,7 +77,7 @@ public abstract class BaseSourceDestEntry implements TargetedFileEntries {
 
 	@Override
 	public List<Entry> getTargetedFileEntries() {
-		return Arrays.asList(new Entry(MainApp.messages.getString("tableContextMenuDir"), rootPath));
+		return Arrays.asList(new Entry(Messages.getString("tableContextMenuDir"), rootPath));
 	}
 
 	@Override

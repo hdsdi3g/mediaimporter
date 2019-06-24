@@ -26,7 +26,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.TableView;
 import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.MouseEvent;
-import tv.hd3g.mediaimporter.MainApp;
+import tv.hd3g.mediaimporter.Messages;
 import tv.hd3g.mediaimporter.TargetedFileEntries;
 import tv.hd3g.mediaimporter.tools.NavigateTo;
 import tv.hd3g.processlauncher.tool.ToolRunner;
@@ -56,7 +56,7 @@ public class TableContextMenu implements EventHandler<ContextMenuEvent> {
 		final List<MenuItem> menus = selected.getTargetedFileEntries().stream().map(entry -> {
 			final MenuItem item;
 			if (entry.isInvalid()) {
-				item = new MenuItem(entry.getLabel() + " " + MainApp.messages.getString("tableContextInvalid"));
+				item = new MenuItem(entry.getLabel() + " " + Messages.getString("tableContextInvalid"));
 			} else {
 				item = new MenuItem(entry.getLabel());
 			}

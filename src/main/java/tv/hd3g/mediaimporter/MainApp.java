@@ -19,29 +19,18 @@ package tv.hd3g.mediaimporter;
 import java.io.File;
 import java.io.IOException;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.LongSummaryStatistics;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.ResourceBundle;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,120 +38,68 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
-import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
-import javafx.collections.ObservableList;
 import javafx.fxml.FXMLLoader;
-import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableRow;
 import javafx.scene.image.Image;
-import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.StrokeType;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextAlignment;
-import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import tv.hd3g.mediaimporter.io.CanBeStopped;
 import tv.hd3g.mediaimporter.io.CopyFilesEngine;
 import tv.hd3g.mediaimporter.io.IntegrityCheckEngine;
 import tv.hd3g.mediaimporter.tools.ConfigurationStore;
-import tv.hd3g.mediaimporter.tools.DriveProbe;
 import tv.hd3g.mediaimporter.tools.FileSanity;
-import tv.hd3g.mediaimporter.tools.NavigateTo;
-import tv.hd3g.mediaimporter.ui.TableCellFileSize;
-import tv.hd3g.mediaimporter.ui.TableContextMenu;
-import tv.hd3g.processlauncher.cmdline.ExecutableFinder;
-import tv.hd3g.processlauncher.tool.ToolRunner;
+import tv.hd3g.mediaimporter.ui.StatusMsgBox;
+import tv.hd3g.mediaimporter.ui.UIMainPanelProvider;
+import tv.hd3g.mediaimporter.ui.UIProgresser;
 
-public class MainApp extends Application {
+public class MainApp extends Application implements UIProgresser, UIMainPanelProvider {
 	private static Logger log = LogManager.getLogger();
 	public static final Logger log4javaFx = LogManager.getLogger("javafx");
 
-	public final static ResourceBundle messages;
-
-	static {
-		messages = ResourceBundle.getBundle(MainApp.class.getPackage().getName() + ".messages");
-	}
 	private static final DecimalFormat decimalFormat1digits = new DecimalFormat("###,###.#");
 	private static final DecimalFormat decimalFormat2digits = new DecimalFormat("###,###.##");
-	private static final BiFunction<Map<File, String>, SourceEntry, String> driveSNFromProbeResult = (probeResult, entry) -> probeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), messages.getString("driveSNDefault"));
-
-	private final ObservableList<SourceEntry> sourcesList;
-	private final ObservableList<DestinationEntry> destsList;
-	private final ObservableList<FileEntry> fileList;
-	private final ToolRunner toolRunner;
-	private final NavigateTo navigateTo;
-	private final SimpleObjectProperty<CanBeStopped> currentCopyEngine;
-	private final FileSanity fileSanity;
-	private final ConcurrentHashMap<File, Long> digestByFileCache;
-
-	private final SimpleObjectProperty<Map<File, String>> lastSNDrivesProbeResult;
-	private final ScheduledExecutorService driveSNUpdaterRegularExecutor;
-	private ScheduledFuture<?> driveSNUpdaterRegularFuture;
+	private static final BiFunction<Map<File, String>, SourceEntry, String> driveSNFromProbeResult = (probeResult, entry) -> probeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), Messages.getString("driveSNDefault"));
 
 	public MainApp() {
 		super();
-		sourcesList = FXCollections.observableList(new ArrayList<SourceEntry>());
-		destsList = FXCollections.observableList(new ArrayList<DestinationEntry>());
-		fileList = FXCollections.observableList(new ArrayList<FileEntry>());
-		fileSanity = FileSanity.get();
-		navigateTo = NavigateTo.get();
-		digestByFileCache = new ConcurrentHashMap<>();
-		toolRunner = new ToolRunner(new ExecutableFinder(), 2);
-		currentCopyEngine = new SimpleObjectProperty<>(null);
-		lastSNDrivesProbeResult = new SimpleObjectProperty<>();
-		driveSNUpdaterRegularExecutor = Executors.newScheduledThreadPool(1);
-		driveSNUpdaterRegularFuture = null;
-		updateSNDrives();
 	}
 
-	private void updateSNDrives() {
-		if (driveSNUpdaterRegularFuture != null) {
-			if (driveSNUpdaterRegularFuture.isCancelled() == false && driveSNUpdaterRegularFuture.isDone() == false) {
-				return;
-			}
-		}
-
-		driveSNUpdaterRegularFuture = driveSNUpdaterRegularExecutor.scheduleAtFixedRate(() -> {
-			try {
-				final Map<File, String> probeResult = DriveProbe.get().getSNByMountedDrive(toolRunner).get(DriveProbe.timeLimitSec + 1, TimeUnit.SECONDS);
-				log.info("Found S/N for drives: {}", probeResult.toString());
-				driveSNUpdaterRegularFuture.cancel(false);
-				Platform.runLater(() -> {
-					lastSNDrivesProbeResult.set(probeResult);
-				});
-			} catch (InterruptedException | ExecutionException | TimeoutException e) {
-				log.warn("Can't get drives S/N, but it will be a retry", e);
-			}
-		}, 0, DriveProbe.timeLimitSec / 2, TimeUnit.SECONDS);
-	}
-
+	private SimpleObjectProperty<CanBeStopped> currentCopyEngine;
 	private MainPanel mainPanel;
 	private Stage stage;
 	private Image appIcon;
 	private ConfigurationStore store;
 
 	@Override
+	public MainPanel getMainPanel() {
+		return mainPanel;
+	}
+
+	@Override
 	public void start(final Stage primaryStage) {
+		final var fileSanity = FileSanity.get();
+		final var digestByFileCache = new ConcurrentHashMap<File, Long>();
+		currentCopyEngine = new SimpleObjectProperty<>(null);
+
 		stage = primaryStage;
 		log.info("Start JavaFX GUI Interface");
 		try {
 
 			final FXMLLoader d = new FXMLLoader();
-
-			d.setResources(Objects.requireNonNull(messages, "\"messages\" can't to be null"));
 			final BorderPane root = (BorderPane) d.load(getClass().getResource(MainPanel.class.getSimpleName() + ".fxml").openStream());
 
 			mainPanel = d.getController();
+
+			final var backend = mainPanel.getBackend();
+			final var sNDriveUpdater = backend.getsNDriveUpdater();
+			sNDriveUpdater.update();
+			final var sourcesList = backend.getSourcesList();
+			final var destsList = backend.getDestsList();
+			final var fileList = backend.getFileList();
 
 			final Scene scene = new Scene(root);
 			scene.getStylesheets().add(getClass().getResource(MainPanel.class.getSimpleName() + ".css").toExternalForm());
@@ -182,9 +119,9 @@ public class MainApp extends Application {
 				}
 				store.getConfigDoubleValue(c.getId() + ".width").ifPresent(c::setPrefWidth);
 			};
-			mainPanel.getTableSources().getColumns().forEach(setColWidthFromConfig);
-			mainPanel.getTableDestinations().getColumns().forEach(setColWidthFromConfig);
-			mainPanel.getTableFiles().getColumns().forEach(setColWidthFromConfig);
+			mainPanel.prepareTableSources(setColWidthFromConfig, stage, file -> new SourceEntry(file, fileSanity, digestByFileCache));
+			mainPanel.prepareTableDestinations(setColWidthFromConfig, stage);
+			mainPanel.prepareTableFiles(setColWidthFromConfig);
 
 			store.getConfigDoubleValue("primaryStage.width").ifPresent(stage::setWidth);
 			store.getConfigDoubleValue("primaryStage.height").ifPresent(stage::setHeight);
@@ -217,109 +154,32 @@ public class MainApp extends Application {
 			/**
 			 * initSourceZone
 			 */
-			final Consumer<File> onAddNewSourceDir = file -> {
-				final SourceEntry toAdd = new SourceEntry(file, fileSanity, digestByFileCache);
-				if (sourcesList.contains(toAdd) == false) {
-					log.info("Add new source directory: " + file);
-					sourcesList.add(toAdd);
-				}
-			};
-
-			mainPanel.getTableSources().setItems(sourcesList);
-			mainPanel.getTableSources().setPlaceholder(createPlaceholder(messages.getString("tableSourcePlaceholder")));
-			setFolderDragAndDrop(mainPanel.getTableSources(), mainPanel.getTableSources().getItems()::isEmpty, onAddNewSourceDir);
-			mainPanel.getTableSourcesColPath().setCellValueFactory(SourceEntry.getColPathFactory());
-			mainPanel.getTableSourcesColDrive().setCellValueFactory(BaseSourceDestEntry.getColDriveFactory());
-			mainPanel.getTableSourcesColType().setCellValueFactory(BaseSourceDestEntry.getColTypeFactory());
-
-			mainPanel.getBtnAddSourceDir().setOnAction(event -> {
-				event.consume();
-				selectDirectory("addSourceDirectory").ifPresent(onAddNewSourceDir);
-			});
 			sourcesList.addListener((ListChangeListener<SourceEntry>) change -> {
 				while (change.next()) {
 					change.getAddedSubList().stream().filter(BaseSourceDestEntry.isStoredOn(sourcesList, destsList)).forEach(entry -> {
-						MainApp.log4javaFx.warn(messages.getString("dontAllowDirs") + ": " + entry);
+						MainApp.log4javaFx.warn(Messages.getString("dontAllowDirs") + ": " + entry);
 						sourcesList.remove(entry);
 					});
 				}
-			});
-			mainPanel.getBtnRemoveSourceDir().setOnAction(event -> {
-				event.consume();
-				final SourceEntry selected = mainPanel.getTableSources().getSelectionModel().getSelectedItem();
-				if (selected != null) {
-					log.debug("Remove source dir: " + selected);
-					sourcesList.remove(selected);
-				}
-			});
-			mainPanel.getTableSources().getSelectionModel().selectedItemProperty().addListener((observable_value, old_value, new_value) -> {
-				mainPanel.getBtnRemoveSourceDir().setDisable(new_value == null);
 			});
 
 			/**
 			 * initDestZone
 			 */
-			final Consumer<File> onAddNewDestDir = file -> {
-				final DestinationEntry toAdd = new DestinationEntry(file);
-				if (destsList.contains(toAdd) == false) {
-					log.info("Add new dest directory: " + file);
-					toAdd.updateSlotsContent();
-					destsList.add(toAdd);
-					fileList.forEach(fileEntry -> {
-						fileEntry.addDestination(toAdd);
-					});
-				}
-			};
-
-			mainPanel.getTableDestinations().setItems(destsList);
-			mainPanel.getTableDestinations().setPlaceholder(createPlaceholder(messages.getString("tableDestPlaceholder")));
-			setFolderDragAndDrop(mainPanel.getTableDestinations(), mainPanel.getTableDestinations().getItems()::isEmpty, onAddNewDestDir);
-			mainPanel.getTableDestinationsColPath().setCellValueFactory(DestinationEntry.getColPathFactory());
-			mainPanel.getTableDestinationsColAvailable().setCellValueFactory(DestinationEntry.getColAvailableFactory());
-			mainPanel.getTableDestinationsColSpeed().setCellValueFactory(DestinationEntry.getColAvailableSpeed());
-			mainPanel.getTableDestinationsColSlots().setCellValueFactory(DestinationEntry.getColAvailableSlots());
-			mainPanel.getTableDestinationsColDrive().setCellValueFactory(BaseSourceDestEntry.getColDriveFactory());
-			mainPanel.getTableDestinationsColType().setCellValueFactory(BaseSourceDestEntry.getColTypeFactory());
-
-			destsList.forEach(DestinationEntry::updateSlotsContent);
-
-			mainPanel.getTableDestinationsColAvailable().setCellFactory(col -> new TableCellFileSize<>());
-			mainPanel.getTableDestinationsColSpeed().setCellFactory(col -> new TableCellFileSize<>("/sec"));
-
 			destsList.addListener((ListChangeListener<DestinationEntry>) change -> {
 				while (change.next()) {
 					change.getAddedSubList().stream().filter(BaseSourceDestEntry.isStoredOn(sourcesList, destsList)).forEach(entry -> {
-						MainApp.log4javaFx.warn(messages.getString("dontAllowDirs") + ": " + entry);
+						MainApp.log4javaFx.warn(Messages.getString("dontAllowDirs") + ": " + entry);
 						destsList.remove(entry);
 					});
 				}
-			});
-			mainPanel.getBtnAddDestinationDir().setOnAction(event -> {
-				event.consume();
-				selectDirectory("addDestDirectory").ifPresent(onAddNewDestDir);
-			});
-			mainPanel.getBtnRemoveDestinationDir().setOnAction(event -> {
-				event.consume();
-				final DestinationEntry selected = mainPanel.getTableDestinations().getSelectionModel().getSelectedItem();
-				if (selected != null) {
-					log.debug("Remove dest dir: " + selected);
-					destsList.remove(selected);
-
-					log.debug("Update all actual references: " + selected);
-					fileList.forEach(fileEntry -> {
-						fileEntry.removeDestination(selected);
-					});
-				}
-			});
-			mainPanel.getTableDestinations().getSelectionModel().selectedItemProperty().addListener((observable_value, old_value, new_value) -> {
-				mainPanel.getBtnRemoveDestinationDir().setDisable(new_value == null);
 			});
 
 			/**
 			 * initFileZone
 			 */
 			final Supplier<Boolean> isBtnAddSourceToScanDisabled = () -> {
-				return sourcesList.isEmpty() | destsList.isEmpty() | lastSNDrivesProbeResult.isNull().get();
+				return sourcesList.isEmpty() | destsList.isEmpty() | sNDriveUpdater.isLastProbeResultNull();
 			};
 
 			mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
@@ -338,18 +198,9 @@ public class MainApp extends Application {
 					}
 				}
 			});
-			lastSNDrivesProbeResult.addListener((observable, oldValue, newValue) -> {
+			sNDriveUpdater.getLastProbeResult().addListener((observable, oldValue, newValue) -> {
 				mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
 			});
-
-			mainPanel.getTableFiles().setItems(fileList);
-			mainPanel.getTableFiles().setPlaceholder(createPlaceholder(messages.getString("tableFilePlaceholder")));
-			mainPanel.getTableFilesColSource().setCellValueFactory(FileEntry.getColSourceFactory());
-			mainPanel.getTableFilesColDriveSN().setCellValueFactory(FileEntry.getColDriveSNFactory());
-			mainPanel.getTableFilesColPath().setCellValueFactory(FileEntry.getColPathFactory());
-			mainPanel.getTableFilesColSize().setCellValueFactory(FileEntry.getColSizeFactory());
-			mainPanel.getTableFilesColStatus().setCellValueFactory(FileEntry.getColStatusFactory());
-			mainPanel.getTableFilesColSize().setCellFactory(col -> new TableCellFileSize<>());
 
 			mainPanel.getBtnAddSourceToScan().setOnAction(event -> {
 				event.consume();
@@ -359,7 +210,7 @@ public class MainApp extends Application {
 				log.info("Start scan source dirs");
 				mainPanel.getBtnClearScanlist().setDisable(true);
 
-				updateSNDrives();
+				sNDriveUpdater.update();
 
 				fileList.removeIf(fileEntry -> {
 					return fileEntry.updateState();
@@ -369,12 +220,12 @@ public class MainApp extends Application {
 
 				sourcesList.forEach(entry -> {
 					final SimpleStringProperty driveSN = new SimpleStringProperty();
-					if (lastSNDrivesProbeResult.isNotNull().get()) {
-						driveSN.set(driveSNFromProbeResult.apply(lastSNDrivesProbeResult.get(), entry));
+					if (sNDriveUpdater.isLastProbeResultNull() == false) {
+						driveSN.set(driveSNFromProbeResult.apply(sNDriveUpdater.getLastProbeResult().get(), entry));
 					} else {
 						driveSN.set(driveSNFromProbeResult.apply(Collections.emptyMap(), entry));
 					}
-					lastSNDrivesProbeResult.addListener((observable, oldValue, newValue) -> {
+					sNDriveUpdater.getLastProbeResult().addListener((observable, oldValue, newValue) -> {
 						driveSN.set(driveSNFromProbeResult.apply(newValue, entry));
 					});
 
@@ -400,14 +251,14 @@ public class MainApp extends Application {
 
 				final LongSummaryStatistics stats = fileList.stream().filter(FileEntry.needsToBeCopied).mapToLong(fileEntry -> fileEntry.getFile().length()).summaryStatistics();
 				if (stats.getCount() > 0) {
-					final String label = String.format(messages.getString("labelProgressReady"), stats.getCount(), MainApp.byteCountToDisplaySizeWithPrecision(stats.getSum()));
+					final String label = String.format(Messages.getString("labelProgressReady"), stats.getCount(), MainApp.byteCountToDisplaySizeWithPrecision(stats.getSum()));
 					mainPanel.getLblProgressionCounter().setText(label);
 					mainPanel.getBtnStartCopy().setDisable(false);
 				}
 
 				mainPanel.getBtnClearScanlist().setDisable(fileList.isEmpty());
 
-				displayStatusMsgBox();
+				new StatusMsgBox(fileList, appIcon).showAndWait();
 			});
 
 			mainPanel.getBtnClearScanlist().setOnAction(event -> {
@@ -454,11 +305,13 @@ public class MainApp extends Application {
 
 						if (checkAfterCopy) {
 							Platform.runLater(() -> {
-								afterCopyBeforeCheckOperation();
+								mainPanel.getProgressBar().setProgress(0);
+								mainPanel.getLblEta().setText("");
+								mainPanel.getLblSpeedCopy().setText(Messages.getString("labelProgressCheck"));
 							});
 							CompletableFuture.runAsync(() -> {
 								Platform.runLater(() -> {
-									displayStatusMsgBox();
+									new StatusMsgBox(fileList, appIcon).showAndWait();
 								});
 							});
 
@@ -504,46 +357,6 @@ public class MainApp extends Application {
 			});
 
 			/**
-			 * initTablesRowFactory
-			 */
-			mainPanel.getTableSources().setRowFactory(tv -> {
-				final TableRow<SourceEntry> row = new TableRow<>();
-				row.setOnMouseClicked(mouseEvent -> {
-					if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-						navigateTo.navigateTo(row.getItem().rootPath, toolRunner);
-					}
-				});
-				return row;
-			});
-
-			mainPanel.getTableDestinations().setRowFactory(tv -> {
-				final TableRow<DestinationEntry> row = new TableRow<>();
-				row.setOnMouseClicked(mouseEvent -> {
-					if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-						navigateTo.navigateTo(row.getItem().rootPath, toolRunner);
-					}
-				});
-				return row;
-			});
-
-			mainPanel.getTableFiles().setRowFactory(tv -> {
-				final TableRow<FileEntry> row = new TableRow<>();
-				row.setOnMouseClicked(mouseEvent -> {
-					if (row.isEmpty() == false && mouseEvent.getButton().equals(MouseButton.PRIMARY) && mouseEvent.getClickCount() == 2) {
-						navigateTo.navigateTo(row.getItem().getFile(), toolRunner);
-					}
-				});
-				return row;
-			});
-
-			/**
-			 * initTablesContextMenu
-			 */
-			new TableContextMenu(mainPanel.getTableSources(), navigateTo, toolRunner);
-			new TableContextMenu(mainPanel.getTableDestinations(), navigateTo, toolRunner);
-			new TableContextMenu(mainPanel.getTableFiles(), navigateTo, toolRunner);
-
-			/**
 			 * Display "about" labels
 			 */
 			final StringBuilder aboutText = new StringBuilder();
@@ -568,18 +381,6 @@ public class MainApp extends Application {
 		}
 	}
 
-	private VBox createPlaceholder(final String text) {
-		final VBox placeholder = new VBox(50);
-		placeholder.setAlignment(Pos.CENTER);
-		final Text welcomeLabel = new Text(text);
-		welcomeLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16;");
-		welcomeLabel.setStrokeType(StrokeType.INSIDE);
-		welcomeLabel.setTextAlignment(TextAlignment.CENTER);
-		welcomeLabel.setFill(Color.web("#bbb"));
-		placeholder.getChildren().add(welcomeLabel);
-		return placeholder;
-	}
-
 	@Override
 	public void stop() {
 		/**
@@ -591,9 +392,9 @@ public class MainApp extends Application {
 			}
 			store.setConfigValue(c.getId() + ".width", c.getWidth());
 		};
-		mainPanel.getTableSources().getColumns().forEach(getColWidthToConfig);
-		mainPanel.getTableDestinations().getColumns().forEach(getColWidthToConfig);
-		mainPanel.getTableFiles().getColumns().forEach(getColWidthToConfig);
+		mainPanel.saveTableSourceSetup(getColWidthToConfig);
+		mainPanel.saveTableDestinationsSetup(getColWidthToConfig);
+		mainPanel.saveTableFilesSetup(getColWidthToConfig);
 
 		store.setConfigValue("primaryStage.width", stage.getWidth());
 		store.setConfigValue("primaryStage.height", stage.getHeight());
@@ -603,12 +404,6 @@ public class MainApp extends Application {
 
 		log.info("JavaFX GUI Interface is stopped");
 		System.exit(0);
-	}
-
-	private Optional<File> selectDirectory(final String titleTextKey) {
-		final DirectoryChooser directoryChooser = new DirectoryChooser();
-		directoryChooser.setTitle(messages.getString(titleTextKey));
-		return Optional.ofNullable(directoryChooser.showDialog(stage));
 	}
 
 	public static String byteCountToDisplaySizeWithPrecision(final long bytes) {
@@ -631,29 +426,6 @@ public class MainApp extends Application {
 		}
 	}
 
-	public void updateProgress(final double progressRate, final int filesCopied, final int totalFiles, final long datasCopiedBytes, final long totalDatasBytes, final long startTimeMsec, final long etaMsec, final long meanCopySpeedBytesPerSec, final long instantCopySpeedBytesPerSec) {
-		mainPanel.getProgressBar().setProgress(progressRate);
-
-		final String counter = String.format(messages.getString("labelProgressProcess"), filesCopied + 1, totalFiles, MainApp.byteCountToDisplaySizeWithPrecision(datasCopiedBytes), MainApp.byteCountToDisplaySizeWithPrecision(totalDatasBytes));
-		mainPanel.getLblProgressionCounter().setText(counter);
-
-		if (etaMsec < 1) {
-			mainPanel.getLblEta().setText("ETA: 00:00:00");
-		} else {
-			mainPanel.getLblEta().setText("ETA: " + DurationFormatUtils.formatDuration(etaMsec, "HH:mm:ss"));
-		}
-
-		final String since;
-		if (startTimeMsec < 1) {
-			since = "00:00:00";
-		} else {
-			since = DurationFormatUtils.formatDuration(startTimeMsec, "HH:mm:ss");
-		}
-
-		final String speedCopy = String.format(messages.getString("labelProgressSpeed"), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(meanCopySpeedBytesPerSec)), MainApp.byteCountToDisplaySizeWithPrecision(Math.round(instantCopySpeedBytesPerSec)), since);
-		mainPanel.getLblSpeedCopy().setText(speedCopy);
-	}
-
 	private void afterAllOperations() {
 		currentCopyEngine.setValue(null);
 		mainPanel.getBtnAddSourceDir().setDisable(false);
@@ -669,63 +441,13 @@ public class MainApp extends Application {
 		mainPanel.getLblEta().setText("");
 		mainPanel.getLblSpeedCopy().setText("");
 
-		fileList.stream().forEach(f -> {
+		mainPanel.getBackend().getFileList().stream().forEach(f -> {
 			f.updateState();
 		});
-		displayStatusMsgBox();
+		new StatusMsgBox(mainPanel.getBackend().getFileList(), appIcon).showAndWait();
 	}
 
-	private void afterCopyBeforeCheckOperation() {
-		mainPanel.getProgressBar().setProgress(0);
-		mainPanel.getLblEta().setText("");
-		mainPanel.getLblSpeedCopy().setText(messages.getString("labelProgressCheck"));
-	}
-
-	private void displayStatusMsgBox() {
-		final Map<FileEntryStatus, Integer> countByStatuses = FileEntryStatus.countByStatuses(fileList);
-		final Map<FileEntryStatus, Long> sizeByStatuses = FileEntryStatus.sizeByStatuses(fileList);
-
-		final AlertType alertType;
-		if (countByStatuses.get(FileEntryStatus.ERROR_OR_INCOMPLETE).intValue() > 0) {
-			alertType = AlertType.ERROR;
-		} else if (countByStatuses.get(FileEntryStatus.PARTIAL_DONE).intValue() > 0) {
-			alertType = AlertType.WARNING;
-		} else {
-			alertType = AlertType.INFORMATION;
-		}
-
-		final String header;
-		if (countByStatuses.get(FileEntryStatus.ERROR_OR_INCOMPLETE).intValue() > 0) {
-			header = messages.getString("statusMsgboxHeader_ERROR_OR_INCOMPLETE");
-		} else if (countByStatuses.get(FileEntryStatus.PARTIAL_DONE).intValue() > 0) {
-			header = messages.getString("statusMsgboxHeader_PARTIAL_DONE");
-		} else if (countByStatuses.get(FileEntryStatus.NOT_STARTED).intValue() > 0) {
-			header = messages.getString("statusMsgboxHeader_NOT_STARTED");
-		} else if (countByStatuses.get(FileEntryStatus.INTEGRITY_INVALID).intValue() > 0) {
-			header = messages.getString("statusMsgboxHeader_INTEGRITY_INVALID");
-		} else if (countByStatuses.get(FileEntryStatus.INTEGRITY_VALID).intValue() > 0) {
-			header = messages.getString("statusMsgboxHeader_INTEGRITY_VALID");
-		} else {
-			header = messages.getString("statusMsgboxHeader_ALL_COPIES_DONE");
-		}
-
-		final Alert alert = new Alert(alertType);
-		alert.setTitle(messages.getString("statusMsgboxTitle"));
-		alert.setHeaderText(header);
-
-		alert.setContentText(Arrays.stream(FileEntryStatus.values()).filter(status -> {
-			return countByStatuses.get(status).intValue() > 0;
-		}).map(status -> {
-			final int count = countByStatuses.get(status).intValue();
-			final String size = byteCountToDisplaySizeWithPrecision(sizeByStatuses.get(status).longValue());
-			return String.format(messages.getString("statusMsgboxContent_" + status.name()), count, size);
-		}).collect(Collectors.joining(System.lineSeparator())));
-
-		((Stage) alert.getDialogPane().getScene().getWindow()).getIcons().add(appIcon);
-		alert.showAndWait();
-	}
-
-	private void setFolderDragAndDrop(final Node node, final Supplier<Boolean> isEmpty, final Consumer<File> onDropDirectory) {
+	public static void setFolderDragAndDrop(final Node node, final Supplier<Boolean> isEmpty, final Consumer<File> onDropDirectory) {
 		final String defaultStyle = node.getStyle();
 		node.setOnDragOver(e -> {
 			e.acceptTransferModes(TransferMode.COPY);

@@ -24,18 +24,18 @@ import java.util.stream.Collectors;
 
 import javafx.application.Platform;
 import tv.hd3g.mediaimporter.DestinationEntrySlot;
-import tv.hd3g.mediaimporter.MainApp;
+import tv.hd3g.mediaimporter.ui.UIProgresser;
 
 public class GlobalCopyStat {
 	private final List<CopyStat> items;
 	private final List<DestinationEntrySlot> slotList;
 
-	private final MainApp ui;
+	private final UIProgresser ui;
 	private final int totalFiles;
 	private final long totalDatasBytes;
 	private final long startDate;
 
-	GlobalCopyStat(final List<CopyStat> items, final MainApp ui) {
+	GlobalCopyStat(final List<CopyStat> items, final UIProgresser ui) {
 		this.items = items;
 		this.ui = ui;
 		totalFiles = items.size();

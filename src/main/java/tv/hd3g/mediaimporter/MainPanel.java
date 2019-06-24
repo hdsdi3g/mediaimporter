@@ -27,8 +27,18 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import tv.hd3g.mediaimporter.ui.PanelBackendProvider;
+import tv.hd3g.mediaimporter.ui.UITableDestinations;
+import tv.hd3g.mediaimporter.ui.UITableFiles;
+import tv.hd3g.mediaimporter.ui.UITableSources;
 
-public class MainPanel {
+public class MainPanel implements UITableSources, UITableDestinations, UITableFiles, PanelBackendProvider {
+
+	private final PanelBackend backend;
+
+	public MainPanel() {
+		backend = new PanelBackend();
+	}
 
 	/**
 	 * Source zone
@@ -108,6 +118,11 @@ public class MainPanel {
 	@FXML
 	private Label lblSpeedCopy;
 
+	@Override
+	public PanelBackend getBackend() {
+		return backend;
+	}
+
 	/**
 	 * Action zone
 	 */
@@ -118,46 +133,57 @@ public class MainPanel {
 	@FXML
 	private Button btnQuit;
 
+	@Override
 	public Button getBtnAddSourceDir() {
 		return btnAddSourceDir;
 	}
 
+	@Override
 	public Button getBtnRemoveSourceDir() {
 		return btnRemoveSourceDir;
 	}
 
+	@Override
 	public TableView<SourceEntry> getTableSources() {
 		return tableSources;
 	}
 
+	@Override
 	public TableColumn<SourceEntry, File> getTableSourcesColPath() {
 		return tableSourcesColPath;
 	}
 
+	@Override
 	public Button getBtnAddDestinationDir() {
 		return btnAddDestinationDir;
 	}
 
+	@Override
 	public Button getBtnRemoveDestinationDir() {
 		return btnRemoveDestinationDir;
 	}
 
+	@Override
 	public TableView<DestinationEntry> getTableDestinations() {
 		return tableDestinations;
 	}
 
+	@Override
 	public TableColumn<DestinationEntry, File> getTableDestinationsColPath() {
 		return tableDestinationsColPath;
 	}
 
+	@Override
 	public TableColumn<DestinationEntry, Number> getTableDestinationsColAvailable() {
 		return tableDestinationsColAvailable;
 	}
 
+	@Override
 	public TableColumn<DestinationEntry, Number> getTableDestinationsColSpeed() {
 		return tableDestinationsColSpeed;
 	}
 
+	@Override
 	public TableColumn<DestinationEntry, Number> getTableDestinationsColSlots() {
 		return tableDestinationsColSlots;
 	}
@@ -178,26 +204,32 @@ public class MainPanel {
 		return cBCheckAfterCopy;
 	}
 
+	@Override
 	public TableView<FileEntry> getTableFiles() {
 		return tableFiles;
 	}
 
+	@Override
 	public TableColumn<FileEntry, String> getTableFilesColSource() {
 		return tableFilesColSource;
 	}
 
+	@Override
 	public TableColumn<FileEntry, String> getTableFilesColDriveSN() {
 		return tableFilesColDriveSN;
 	}
 
+	@Override
 	public TableColumn<FileEntry, String> getTableFilesColPath() {
 		return tableFilesColPath;
 	}
 
+	@Override
 	public TableColumn<FileEntry, Number> getTableFilesColSize() {
 		return tableFilesColSize;
 	}
 
+	@Override
 	public TableColumn<FileEntry, String> getTableFilesColStatus() {
 		return tableFilesColStatus;
 	}
@@ -230,18 +262,22 @@ public class MainPanel {
 		return btnQuit;
 	}
 
+	@Override
 	public TableColumn<SourceEntry, String> getTableSourcesColDrive() {
 		return tableSourcesColDrive;
 	}
 
+	@Override
 	public TableColumn<SourceEntry, String> getTableSourcesColType() {
 		return tableSourcesColType;
 	}
 
+	@Override
 	public TableColumn<DestinationEntry, String> getTableDestinationsColDrive() {
 		return tableDestinationsColDrive;
 	}
 
+	@Override
 	public TableColumn<DestinationEntry, String> getTableDestinationsColType() {
 		return tableDestinationsColType;
 	}

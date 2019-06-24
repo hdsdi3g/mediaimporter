@@ -19,7 +19,6 @@ package tv.hd3g.mediaimporter.ui;
 import java.io.PrintWriter;
 import java.io.Serializable;
 import java.io.StringWriter;
-import java.util.ResourceBundle;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.Filter;
@@ -39,12 +38,10 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
-import tv.hd3g.mediaimporter.MainApp;
+import tv.hd3g.mediaimporter.Messages;
 
 @Plugin(name = "DialogAppender", category = "Core", elementType = "appender", printObject = true)
 public class DialogAppender extends AbstractAppender {
-
-	private final ResourceBundle messages = MainApp.messages;
 
 	protected DialogAppender(final String name, final Filter filter, final Layout<? extends Serializable> layout, final boolean ignoreExceptions) {
 		super(name, filter, layout, ignoreExceptions);
@@ -65,13 +62,13 @@ public class DialogAppender extends AbstractAppender {
 			final String title;
 			if (event.getLevel().equals(Level.WARN)) {
 				alertType = AlertType.WARNING;
-				title = messages.getString("alertWarning");
+				title = Messages.getString("alertWarning");
 			} else if (event.getLevel().equals(Level.ERROR)) {
 				alertType = AlertType.ERROR;
-				title = messages.getString("alertError");
+				title = Messages.getString("alertError");
 			} else {
 				alertType = AlertType.INFORMATION;
-				title = messages.getString("alertInformation");
+				title = Messages.getString("alertInformation");
 			}
 
 			final Alert alert = new Alert(alertType);
@@ -101,7 +98,7 @@ public class DialogAppender extends AbstractAppender {
 				textArea.setMaxHeight(Double.MAX_VALUE);
 				GridPane.setVgrow(textArea, Priority.ALWAYS);
 				GridPane.setHgrow(textArea, Priority.ALWAYS);
-				expContent.add(new Label(messages.getString("alertDisplayStacktrace")), 0, i++);
+				expContent.add(new Label(Messages.getString("alertDisplayStacktrace")), 0, i++);
 				expContent.add(textArea, 0, i++);
 			}
 

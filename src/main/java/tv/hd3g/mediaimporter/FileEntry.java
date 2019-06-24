@@ -136,7 +136,7 @@ public class FileEntry implements TargetedFileEntries {
 
 	public String getDriveSNValue() {
 		if (driveSN.isEmpty().get()) {
-			return MainApp.messages.getString("driveSNDefault");
+			return Messages.getString("driveSNDefault");
 		}
 		return driveSN.getValue();
 	}
@@ -182,33 +182,33 @@ public class FileEntry implements TargetedFileEntries {
 			status.set("Error: " + lastCopyError.getMessage());
 			currentResumeStatus = FileEntryStatus.ERROR_OR_INCOMPLETE;
 		} else if (copiesByDestination.isEmpty()) {
-			status.setValue(MainApp.messages.getString("fileEntryStatusNew"));
+			status.setValue(Messages.getString("fileEntryStatusNew"));
 			currentResumeStatus = FileEntryStatus.NOT_STARTED;
 		} else if (integrityAllStates != IntegrityAllState.NOT_CHECKED) {
 			if (integrityAllStates == IntegrityAllState.ALL_VALID) {
-				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusDoneCheck"), copiesByDestination.size()));
+				status.setValue(String.format(Messages.getString("fileEntryStatusDoneCheck"), copiesByDestination.size()));
 				currentResumeStatus = FileEntryStatus.INTEGRITY_VALID;
 			} else {
-				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusDoneCorrupted"), copiesByDestination.size()));
+				status.setValue(String.format(Messages.getString("fileEntryStatusDoneCorrupted"), copiesByDestination.size()));
 				currentResumeStatus = FileEntryStatus.INTEGRITY_INVALID;
 			}
 		} else {
 			final boolean isNotOnError = copiesByDestination.values().stream().allMatch(isSameSize);
 			if (copiesByDestination.size() == destsList.size()) {
 				if (isNotOnError) {
-					status.setValue(String.format(MainApp.messages.getString("fileEntryStatusDone"), copiesByDestination.size()));
+					status.setValue(String.format(Messages.getString("fileEntryStatusDone"), copiesByDestination.size()));
 					currentResumeStatus = FileEntryStatus.ALL_COPIES_DONE;
 				} else {
 					final long inError = copiesByDestination.values().stream().filter(isSameSize.negate()).count();
-					status.setValue(String.format(MainApp.messages.getString("fileEntryStatusWithError"), inError, copiesByDestination.size()));
+					status.setValue(String.format(Messages.getString("fileEntryStatusWithError"), inError, copiesByDestination.size()));
 					currentResumeStatus = FileEntryStatus.ERROR_OR_INCOMPLETE;
 				}
 			} else if (isNotOnError) {
-				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartial"), copiesByDestination.size(), destsList.size()));
+				status.setValue(String.format(Messages.getString("fileEntryStatusPartial"), copiesByDestination.size(), destsList.size()));
 				currentResumeStatus = FileEntryStatus.PARTIAL_DONE;
 			} else {
 				final long inError = copiesByDestination.values().stream().filter(isSameSize.negate()).count();
-				status.setValue(String.format(MainApp.messages.getString("fileEntryStatusPartialWithError"), inError, copiesByDestination.size(), destsList.size()));
+				status.setValue(String.format(Messages.getString("fileEntryStatusPartialWithError"), inError, copiesByDestination.size(), destsList.size()));
 				currentResumeStatus = FileEntryStatus.ERROR_OR_INCOMPLETE;
 			}
 		}
@@ -236,7 +236,7 @@ public class FileEntry implements TargetedFileEntries {
 				eta = DurationFormatUtils.formatDuration(currentEtaMsec, "HH:mm:ss");
 			}
 
-			status.set(String.format(MainApp.messages.getString("fileEntryStatusProgress"), readed, speed, eta));
+			status.set(String.format(Messages.getString("fileEntryStatusProgress"), readed, speed, eta));
 		});
 	}
 
@@ -331,9 +331,9 @@ public class FileEntry implements TargetedFileEntries {
 
 	@Override
 	public List<Entry> getTargetedFileEntries() {
-		final String messageDest = MainApp.messages.getString("tableContextDestFile");
+		final String messageDest = Messages.getString("tableContextDestFile");
 
-		final Stream<Entry> sourceEntry = Stream.of(new Entry(MainApp.messages.getString("tableContextSourceFile"), file));
+		final Stream<Entry> sourceEntry = Stream.of(new Entry(Messages.getString("tableContextSourceFile"), file));
 
 		final Stream<Entry> destEntries = destsList.stream().filter(copiesByDestination::containsKey).map(dest -> {
 			final CopiedFileReference ref = copiesByDestination.get(dest);

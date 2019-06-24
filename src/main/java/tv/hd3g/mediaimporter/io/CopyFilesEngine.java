@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 
 import tv.hd3g.mediaimporter.DestinationEntry;
 import tv.hd3g.mediaimporter.FileEntry;
-import tv.hd3g.mediaimporter.MainApp;
+import tv.hd3g.mediaimporter.ui.UIProgresser;
 
 public class CopyFilesEngine implements CanBeStopped {
 	private static Logger log = LogManager.getLogger();
@@ -53,7 +53,7 @@ public class CopyFilesEngine implements CanBeStopped {
 	/**
 	 * Not reusable
 	 */
-	public CopyFilesEngine(final List<FileEntry> toCopy, final List<DestinationEntry> allDestinations, final MainApp ui) {
+	public CopyFilesEngine(final List<FileEntry> toCopy, final List<DestinationEntry> allDestinations, final UIProgresser ui) {
 		this.allDestinations = allDestinations;
 
 		mainExecutor = new ThreadPoolExecutor(1, 1, 10l, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(), r -> {
