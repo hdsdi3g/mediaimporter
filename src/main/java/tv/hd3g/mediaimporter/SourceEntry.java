@@ -27,7 +27,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import javafx.beans.property.ReadOnlyObjectWrapper;
-import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
 import javafx.scene.control.TableColumn.CellDataFeatures;
@@ -55,7 +54,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 	/**
 	 * @return new file entries.
 	 */
-	public List<FileEntry> scanSource(final ObservableList<FileEntry> fileList, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList) throws IOException {
+	public List<FileEntry> scanSource(final ObservableList<FileEntry> fileList, final List<DestinationEntry> destsList) throws IOException {
 		updateColsDriveType();
 
 		final Set<FileEntry> actualFileEntrySet = fileList.stream().distinct().collect(Collectors.toSet());
@@ -79,7 +78,7 @@ public class SourceEntry extends BaseSourceDestEntry {
 			}
 			return fileSanity.isFileIsValid(founded);
 		}).peek(actualFileSet::add).map(founded -> {
-			final FileEntry newFileEntry = new FileEntry(this, founded, driveSN, destsList, digestByFileCache);
+			final FileEntry newFileEntry = new FileEntry(this, founded, destsList, digestByFileCache);
 			fileList.add(newFileEntry);
 			return newFileEntry;
 		}).collect(Collectors.toUnmodifiableList());

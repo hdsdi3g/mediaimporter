@@ -51,8 +51,8 @@ public class DestinationEntrySlot {
 		return slotRootDir;
 	}
 
-	public File makePathFromRelativePath(final String driveSNValue, final String relativePath) {
-		return new File(slotRootDir.getPath() + File.separator + driveSNValue + File.separator + relativePath);
+	public File makePathFromRelativePath(final String driveRef, final String relativePath) {
+		return new File(slotRootDir.getPath() + File.separator + driveRef + File.separator + relativePath);
 	}
 
 	public DestinationEntry getDestination() {

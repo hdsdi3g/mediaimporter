@@ -100,9 +100,9 @@ public class DestinationEntry extends BaseSourceDestEntry {
 		slots.sort((l, r) -> Long.compare(l.getDir().lastModified(), r.getDir().lastModified()));
 	}
 
-	public List<File> searchCopyPresence(final String relativePath, final String driveSN) {
+	public List<File> searchCopyPresence(final String relativePath, final String driveRef) {
 		return slots.stream().map(slot -> {
-			return slot.makePathFromRelativePath(driveSN, relativePath);
+			return slot.makePathFromRelativePath(driveRef, relativePath);
 		}).filter(File::exists).collect(Collectors.toUnmodifiableList());
 	}
 

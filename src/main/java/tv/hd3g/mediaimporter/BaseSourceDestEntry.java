@@ -119,6 +119,22 @@ public abstract class BaseSourceDestEntry implements TargetedFileEntries {
 		return rootPath;
 	}
 
+	/**
+	 * @return like "CD-ROM (M:)" or "MyDir E"
+	 */
+	public String getSystemDisplayName() {
+		final var systemDisplayName = fileSystemView.getSystemDisplayName(rootPath);
+		if (rootPath.getName().equals(systemDisplayName)) {
+			final var abs = rootPath.getAbsolutePath();
+			if (abs.contains(":")) {
+				return rootPath.getName() + " " + abs.substring(0, abs.indexOf(":"));
+			} else {
+				return abs;
+			}
+		}
+		return systemDisplayName;
+	}
+
 	public void updateColsDriveType() {
 		systemDriveName.set(fileSystemView.getSystemDisplayName(rootPath));
 		systemDriveType.set(fileSystemView.getSystemTypeDescription(rootPath));

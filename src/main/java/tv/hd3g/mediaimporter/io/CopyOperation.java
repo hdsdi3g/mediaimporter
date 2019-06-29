@@ -97,7 +97,7 @@ public class CopyOperation {
 
 		final Map<Path, DestinationEntrySlot> slotsToCopyByPath = destinationListToCopy.stream().collect(Collectors.toUnmodifiableMap(slot -> {
 			final String relativePath = entryToCopy.getRelativePath();
-			final File fileDestination = slot.makePathFromRelativePath(entryToCopy.getDriveSNValue(), relativePath);
+			final File fileDestination = slot.makePathFromRelativePath(entryToCopy.getDriveReference(), relativePath);
 
 			try {
 				final String sourceFullPath = entryToCopy.getFile().getAbsolutePath();
@@ -106,7 +106,7 @@ public class CopyOperation {
 
 				final Iterator<Path> relativePathIterator = Path.of(relativePath).iterator();
 				File currentSourcePath = new File(sourceBasePath);
-				File currentDestPath = slot.makePathFromRelativePath(entryToCopy.getDriveSNValue(), "");
+				File currentDestPath = slot.makePathFromRelativePath(entryToCopy.getDriveReference(), "");
 				FileUtils.forceMkdir(currentDestPath);
 
 				while (relativePathIterator.hasNext()) {

@@ -45,7 +45,6 @@ public class FileEntry implements TargetedFileEntries {
 	private final SourceEntry source;
 	private final File file;
 	private final SimpleStringProperty status;
-	private final SimpleStringProperty driveSN;
 	private final Map<DestinationEntry, CopiedFileReference> copiesByDestination;
 	private final String relativePath;
 	private final List<DestinationEntry> destsList;
@@ -56,10 +55,9 @@ public class FileEntry implements TargetedFileEntries {
 	private String computedDigest;
 	private IntegrityAllState integrityAllStates;
 
-	public FileEntry(final SourceEntry source, final File file, final SimpleStringProperty driveSN, final List<DestinationEntry> destsList, final Map<File, Long> digestByFileCache) {
+	public FileEntry(final SourceEntry source, final File file, final List<DestinationEntry> destsList, final Map<File, Long> digestByFileCache) {
 		this.source = Objects.requireNonNull(source, "\"source\" can't to be null");
 		this.file = Objects.requireNonNull(file, "\"file\" can't to be null");
-		this.driveSN = Objects.requireNonNull(driveSN, "\"driveSN\" can't to be null");
 		this.digestByFileCache = Objects.requireNonNull(digestByFileCache, "\"digestByFileCache\" can't to be null");
 
 		status = new SimpleStringProperty();
@@ -82,8 +80,12 @@ public class FileEntry implements TargetedFileEntries {
 		integrityAllStates = IntegrityAllState.NOT_CHECKED;
 	}
 
+	public String getDriveReference() {
+		return source.getSystemDisplayName().replaceAll("\\(", "").replaceAll("\\)", "").replaceAll(":", "").replaceAll("//", "").replaceAll("\\\\", "").replaceAll(" ", "_");
+	}
+
 	public void addDestination(final DestinationEntry destination) {
-		final List<File> foundedPotential = destination.searchCopyPresence(relativePath, getDriveSNValue());
+		final List<File> foundedPotential = destination.searchCopyPresence(relativePath, getDriveReference());
 
 		foundedPotential.stream().filter(potentialFile -> file.length() == potentialFile.length()).filter(potentialFile -> {
 			if (potentialFile.length() < maxFileSizeDigestCompute) {
@@ -132,13 +134,6 @@ public class FileEntry implements TargetedFileEntries {
 			addDestination(destination);
 		});
 		return false;
-	}
-
-	public String getDriveSNValue() {
-		if (driveSN.isEmpty().get()) {
-			return Messages.getString("driveSNDefault");
-		}
-		return driveSN.getValue();
 	}
 
 	public void removeDestination(final DestinationEntry oldDestination) {
@@ -302,12 +297,6 @@ public class FileEntry implements TargetedFileEntries {
 	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColSourceFactory() {
 		return param -> {
 			return new ReadOnlyObjectWrapper<>(param.getValue().source.rootPath.getPath());
-		};
-	}
-
-	public static Callback<CellDataFeatures<FileEntry, String>, ObservableValue<String>> getColDriveSNFactory() {
-		return param -> {
-			return param.getValue().driveSN;
 		};
 	}
 

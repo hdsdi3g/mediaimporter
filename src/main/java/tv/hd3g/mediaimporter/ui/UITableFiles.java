@@ -37,8 +37,6 @@ public interface UITableFiles extends PanelBackendProvider {
 
 	TableColumn<FileEntry, String> getTableFilesColSource();
 
-	TableColumn<FileEntry, String> getTableFilesColDriveSN();
-
 	TableColumn<FileEntry, String> getTableFilesColPath();
 
 	TableColumn<FileEntry, Number> getTableFilesColSize();
@@ -53,7 +51,6 @@ public interface UITableFiles extends PanelBackendProvider {
 		tableFiles.setItems(fileList);
 		tableFiles.setPlaceholder(new Placeholder(Messages.getString("tableFilePlaceholder")));
 		getTableFilesColSource().setCellValueFactory(FileEntry.getColSourceFactory());
-		getTableFilesColDriveSN().setCellValueFactory(FileEntry.getColDriveSNFactory());
 		getTableFilesColPath().setCellValueFactory(FileEntry.getColPathFactory());
 		getTableFilesColSize().setCellValueFactory(FileEntry.getColSizeFactory());
 		getTableFilesColStatus().setCellValueFactory(FileEntry.getColStatusFactory());

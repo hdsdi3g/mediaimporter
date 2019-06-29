@@ -19,14 +19,11 @@ package tv.hd3g.mediaimporter;
 import java.io.File;
 import java.io.IOException;
 import java.text.DecimalFormat;
-import java.util.Collections;
 import java.util.List;
 import java.util.LongSummaryStatistics;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -37,7 +34,6 @@ import org.apache.logging.log4j.Logger;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
-import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -62,7 +58,6 @@ public class MainApp extends Application implements UIProgresser, UIMainPanelPro
 
 	private static final DecimalFormat decimalFormat1digits = new DecimalFormat("###,###.#");
 	private static final DecimalFormat decimalFormat2digits = new DecimalFormat("###,###.##");
-	private static final BiFunction<Map<File, String>, SourceEntry, String> driveSNFromProbeResult = (probeResult, entry) -> probeResult.getOrDefault(entry.rootPath.toPath().getRoot().toFile(), Messages.getString("driveSNDefault"));
 
 	public MainApp() {
 		super();
@@ -95,8 +90,6 @@ public class MainApp extends Application implements UIProgresser, UIMainPanelPro
 			mainPanel = d.getController();
 
 			final var backend = mainPanel.getBackend();
-			final var sNDriveUpdater = backend.getsNDriveUpdater();
-			sNDriveUpdater.update();
 			final var sourcesList = backend.getSourcesList();
 			final var destsList = backend.getDestsList();
 			final var fileList = backend.getFileList();
@@ -179,7 +172,7 @@ public class MainApp extends Application implements UIProgresser, UIMainPanelPro
 			 * initFileZone
 			 */
 			final Supplier<Boolean> isBtnAddSourceToScanDisabled = () -> {
-				return sourcesList.isEmpty() | destsList.isEmpty() | sNDriveUpdater.isLastProbeResultNull();
+				return sourcesList.isEmpty() | destsList.isEmpty();
 			};
 
 			mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
@@ -198,9 +191,6 @@ public class MainApp extends Application implements UIProgresser, UIMainPanelPro
 					}
 				}
 			});
-			sNDriveUpdater.getLastProbeResult().addListener((observable, oldValue, newValue) -> {
-				mainPanel.getBtnAddSourceToScan().setDisable(isBtnAddSourceToScanDisabled.get());
-			});
 
 			mainPanel.getBtnAddSourceToScan().setOnAction(event -> {
 				event.consume();
@@ -210,8 +200,6 @@ public class MainApp extends Application implements UIProgresser, UIMainPanelPro
 				log.info("Start scan source dirs");
 				mainPanel.getBtnClearScanlist().setDisable(true);
 
-				sNDriveUpdater.update();
-
 				fileList.removeIf(fileEntry -> {
 					return fileEntry.updateState();
 				});
@@ -219,18 +207,8 @@ public class MainApp extends Application implements UIProgresser, UIMainPanelPro
 				digestByFileCache.clear();
 
 				sourcesList.forEach(entry -> {
-					final SimpleStringProperty driveSN = new SimpleStringProperty();
-					if (sNDriveUpdater.isLastProbeResultNull() == false) {
-						driveSN.set(driveSNFromProbeResult.apply(sNDriveUpdater.getLastProbeResult().get(), entry));
-					} else {
-						driveSN.set(driveSNFromProbeResult.apply(Collections.emptyMap(), entry));
-					}
-					sNDriveUpdater.getLastProbeResult().addListener((observable, oldValue, newValue) -> {
-						driveSN.set(driveSNFromProbeResult.apply(newValue, entry));
-					});
-
 					try {
-						final List<FileEntry> newFilesEntries = entry.scanSource(fileList, driveSN, destsList);
+						final List<FileEntry> newFilesEntries = entry.scanSource(fileList, destsList);
 
 						if (newFilesEntries.isEmpty() == false) {
 							log.info("Found " + newFilesEntries.size() + " new file(s), start update copies references");

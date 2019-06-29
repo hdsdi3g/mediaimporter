@@ -98,8 +98,6 @@ public class MainPanel implements UITableSources, UITableDestinations, UITableFi
 	@FXML
 	private TableColumn<FileEntry, String> tableFilesColSource;
 	@FXML
-	private TableColumn<FileEntry, String> tableFilesColDriveSN;
-	@FXML
 	private TableColumn<FileEntry, String> tableFilesColPath;
 	@FXML
 	private TableColumn<FileEntry, Number> tableFilesColSize;
@@ -212,11 +210,6 @@ public class MainPanel implements UITableSources, UITableDestinations, UITableFi
 	@Override
 	public TableColumn<FileEntry, String> getTableFilesColSource() {
 		return tableFilesColSource;
-	}
-
-	@Override
-	public TableColumn<FileEntry, String> getTableFilesColDriveSN() {
-		return tableFilesColDriveSN;
 	}
 
 	@Override

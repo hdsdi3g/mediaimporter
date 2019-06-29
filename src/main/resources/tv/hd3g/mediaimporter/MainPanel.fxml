@@ -67,11 +67,10 @@
                <center>
                   <TableView fx:id="tableFiles" prefHeight="270.0" prefWidth="805.0" BorderPane.alignment="CENTER">
                     <columns>
-                      <TableColumn fx:id="tableFilesColSource" editable="false" prefWidth="200.57141333818436" text="Source path" />
-                        <TableColumn fx:id="tableFilesColDriveSN" editable="false" minWidth="0.0" prefWidth="100.00001525878906" sortable="false" text="Drive S/N" />
-                      <TableColumn fx:id="tableFilesColPath" editable="false" minWidth="0.0" prefWidth="353.142822265625" text="File path" />
-                        <TableColumn fx:id="tableFilesColSize" editable="false" minWidth="0.0" prefWidth="64.0" sortable="false" text="Size" />
-                        <TableColumn fx:id="tableFilesColStatus" editable="false" minWidth="0.0" prefWidth="336.57147216796875" text="Status" />
+                      <TableColumn fx:id="tableFilesColSource" editable="false" prefWidth="230.2857077717781" text="Source path" />
+                      <TableColumn fx:id="tableFilesColPath" editable="false" minWidth="0.0" prefWidth="337.1427764892578" text="File path" />
+                        <TableColumn fx:id="tableFilesColSize" editable="false" minWidth="0.0" prefWidth="62.28564453125" sortable="false" text="Size" />
+                        <TableColumn fx:id="tableFilesColStatus" editable="false" minWidth="0.0" prefWidth="425.14276123046875" text="Status" />
                     </columns>
                   </TableView>
                </center>
