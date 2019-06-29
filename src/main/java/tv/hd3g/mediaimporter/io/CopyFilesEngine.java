@@ -16,6 +16,7 @@
 */
 package tv.hd3g.mediaimporter.io;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -93,11 +94,11 @@ public class CopyFilesEngine implements CanBeStopped {
 
 		dataSizeToCopyBytes = copyList.stream().mapToLong(CopyOperation::getSourceLength).sum();
 
-		copyList.stream().map(CopyOperation::getSourcePath).map(source -> {
+		allDestinations.stream().map(DestinationEntry::getRootPath).map(File::toPath).map(dest -> {
 			try {
-				return Files.getFileStore(source);
+				return Files.getFileStore(dest);
 			} catch (final IOException e) {
-				throw new RuntimeException("Can't prepare copy operation with " + source, e);
+				throw new RuntimeException("Can't prepare copy operation with " + dest, e);
 			}
 		}).distinct().forEach(fileStore -> {
 			try {
